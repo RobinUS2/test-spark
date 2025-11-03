@@ -44,6 +44,10 @@ Via lastFm to MusicBrainz (LastFm stopped exposing images), bit of a little nigh
 🎨 Found MusicBrainz image for MBID 4b1a830b-0a1f-42e5-b8d5-1d6743912e99: https://commons.wikimedia.org/wiki/Special:Redirect/file/File:Creed_salt_lake_city.jpg
 ```
 
+## Other things
+Simple structured logger implemented.
+
+
 ## Todos
 - @todo structured logger, update log verbosities, get rid of emojis, just show those as INFO records and set rest to DEBUG/TRACE
 - @todo use the artist name from lastfm as normalized clean value and use that for display in stats

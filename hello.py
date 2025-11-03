@@ -5,6 +5,7 @@ PySpark application for processing music data with Last.fm API integration
 """
 
 import json
+import logging
 import os
 import re
 from datetime import datetime
@@ -19,8 +20,50 @@ from sqlalchemy import create_engine, text, Column, Integer, String, DateTime, B
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# print user of os
-print(f"Running as user: {os.getenv('USER')}")
+# Configure structured logging with custom formatter
+class StructuredFormatter(logging.Formatter):
+    def format(self, record):
+        # Start with the basic format
+        log_message = super().format(record)
+        
+        # Add extra data if present
+        extra_data = {}
+        for key, value in record.__dict__.items():
+            if key not in ['name', 'msg', 'args', 'levelname', 'levelno', 'pathname', 'filename',
+                          'module', 'exc_info', 'exc_text', 'stack_info', 'lineno', 'funcName',
+                          'created', 'msecs', 'relativeCreated', 'thread', 'threadName',
+                          'processName', 'process', 'message', 'asctime']:
+                extra_data[key] = value
+        
+        if extra_data:
+            extra_str = " | ".join([f"{k}={v}" for k, v in extra_data.items()])
+            log_message += f" | {extra_str}"
+            
+        return log_message
+
+# Set up logging with custom formatter
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Remove any existing handlers
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+# Create console handler with structured formatter
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = StructuredFormatter(
+    fmt='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# Prevent duplicate logs from root logger
+logger.propagate = False
+
+# Log application startup
+logger.info("Application starting", extra={'user': os.getenv('USER')})
 
 # Database configuration - easily changeable for PostgreSQL later
 DB_CONFIG = {
@@ -125,45 +168,55 @@ def save_dataframe_to_db(df_pandas, table_name='music_records'):
             with engine.connect() as conn:
                 conn.execute(text(f"DELETE FROM {table_name}"))
                 conn.commit()
-                print(f"🧹 Cleared existing data from {table_name} table")
+                logger.debug("Cleared existing data from table", extra={'table': table_name})
         
-        # Debug: Print DataFrame info
-        print(f"📊 DataFrame columns before save: {list(df_pandas.columns)}")
-        print(f"📊 DataFrame shape: {df_pandas.shape}")
+        # Log DataFrame info
+        logger.debug("DataFrame info before save", extra={
+            'columns': list(df_pandas.columns),
+            'shape': df_pandas.shape
+        })
         
         # Ensure we have the artist_clean column
         if 'artist_clean' in df_pandas.columns:
             sample_clean = df_pandas['artist_clean'].iloc[0] if len(df_pandas) > 0 else "N/A"
-            print(f"📊 Sample artist_clean value: '{sample_clean}'")
+            logger.debug("DataFrame validation", extra={'sample_artist_clean': sample_clean})
         else:
-            print("⚠️  Warning: artist_clean column not found in DataFrame!")
+            logger.warning("artist_clean column not found in DataFrame")
         
-        # Debug: Show pandas DataFrame columns and sample data before save
-        print(f"📊 Pandas DataFrame columns before to_sql: {list(df_pandas.columns)}")
-        print(f"📊 Sample pandas data:")
-        for i in range(min(3, len(df_pandas))):
-            row = df_pandas.iloc[i]
-            print(f"   Row {i}: raw_artist='{row['raw_artist']}', artist_clean='{row['artist_clean']}'")
+        # Log sample data before save
+        logger.debug("Sample data before save", extra={
+            'columns': list(df_pandas.columns),
+            'sample_rows': [
+                {'raw_artist': row['raw_artist'], 'artist_clean': row['artist_clean']}
+                for _, row in df_pandas.head(3).iterrows()
+            ]
+        })
         
         # Save to database - use 'append' since we cleared the data above
-        print(f"🔄 About to call to_sql with method='multi', chunksize=1000...")
+        logger.debug("Starting database save", extra={'method': 'multi', 'chunksize': 1000})
         df_pandas.to_sql(table_name, engine, if_exists='append', index=False, method='multi', chunksize=1000)
-        print(f"✅ to_sql completed - saved {len(df_pandas)} records to {table_name} table")
+        logger.info("Data saved to database", extra={
+            'table': table_name, 
+            'record_count': len(df_pandas)
+        })
         
         # Force commit by creating a new connection
-        print(f"🔄 Creating new connection to verify data...")
+        logger.debug("Verifying data save")
         with engine.connect() as conn:
             # Commit any pending transaction
             conn.commit()
             result = conn.execute(text("SELECT raw_artist, artist_clean FROM music_records LIMIT 3")).fetchall()
-            print(f"🔍 Immediate verification with new connection - first 3 records:")
-            for i, (raw, clean) in enumerate(result, 1):
-                print(f"   {i}. Raw: '{raw}' → Clean: '{clean}' (type: {type(clean)})")
+            logger.debug("Database verification completed", extra={
+                'verification_records': [{'raw': r[0], 'clean': r[1]} for r in result]
+            })
         
         return True
     except Exception as e:
-        print(f"❌ Error saving to database: {str(e)}")
-        print(f"📊 DataFrame columns during error: {list(df_pandas.columns)}")
+        logger.error("Failed to save DataFrame to database", extra={
+            'error': str(e),
+            'table': table_name,
+            'columns': list(df_pandas.columns)
+        })
         return False
 
 def get_artist_image_from_cache(artist_clean_name):
@@ -482,8 +535,17 @@ def cache_artist_image(artist_name, image_url, success=True, error_message=None,
             session.add(new_image)
         
         session.commit()
+        logger.debug("Cached artist image", extra={
+            'artist': artist_name.strip(),
+            'success': success,
+            'has_image': bool(image_url),
+            'has_mbid': bool(mbid)
+        })
     except Exception as e:
-        print(f"Error caching artist image: {str(e)}")
+        logger.error("Failed to cache artist image", extra={
+            'artist': artist_name.strip(),
+            'error': str(e)
+        })
         session.rollback()
     finally:
         session.close()
@@ -551,8 +613,20 @@ def cache_track_info(artist_clean, song_clean, duration=None, track_mbid=None, s
             session.add(new_track)
         
         session.commit()
+        logger.debug("Cached track info", extra={
+            'artist': artist_clean.strip(),
+            'song': song_clean.strip(),
+            'success': success,
+            'has_duration': duration is not None,
+            'duration': duration,
+            'has_mbid': bool(track_mbid)
+        })
     except Exception as e:
-        print(f"Error caching track info: {str(e)}")
+        logger.error("Failed to cache track info", extra={
+            'artist': artist_clean.strip(),
+            'song': song_clean.strip(),
+            'error': str(e)
+        })
         session.rollback()
     finally:
         session.close()
@@ -598,14 +672,20 @@ def fetch_musicbrainz_image(mbid):
                         filename = image_url.split('/')[-1]
                         image_url = f"https://commons.wikimedia.org/wiki/Special:Redirect/file/{filename}"
                     
-                    print(f"🎨 Found MusicBrainz image for MBID {mbid}: {image_url}")
+                    logger.info("MusicBrainz image found", extra={
+                        'mbid': mbid,
+                        'image_url': image_url
+                    })
                     return image_url
         
-        print(f"🔍 No image found in MusicBrainz for MBID {mbid}")
+        logger.debug("No image found in MusicBrainz", extra={'mbid': mbid})
         return None
         
     except requests.exceptions.RequestException as e:
-        print(f"❌ MusicBrainz API error for MBID {mbid}: {str(e)[:100]}")
+        logger.warning("MusicBrainz API error", extra={
+            'mbid': mbid,
+            'error': str(e)[:100]
+        })
         return None
 
 def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
@@ -628,7 +708,7 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
     # Check cache first using cleaned name as key
     cached_result = get_artist_image_from_cache(artist_clean_name)
     if cached_result is not None:
-        print(f"🎯 Cache hit for artist: {artist_clean_name}")
+        logger.debug("Artist cache hit", extra={'artist': artist_clean_name})
         # Get MBID from cache too
         engine = get_database_engine()
         Session = sessionmaker(bind=engine)
@@ -642,7 +722,7 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
         finally:
             session.close()
     
-    print(f"🌐 Fetching from Last.fm API for artist: {lookup_name} (cache key: {artist_clean_name})")
+    logger.info("Fetching from Last.fm API", extra={'artist': lookup_name, 'cache_key': artist_clean_name})
     
     # Last.fm API key
     api_key = "9b38e4cb99aa0de263aa854e1582fad4" # @todo move to env var
@@ -668,12 +748,12 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
         mbid = None
         if 'artist' in data:
             artist_data = data['artist']
-            print(f"🔍 Last.fm API fields for '{lookup_name}': {list(artist_data.keys())}")
+            logger.debug("Last.fm API response fields", extra={'artist': lookup_name, 'fields': list(artist_data.keys())})
             
             # Check for MBID (MusicBrainz ID)
             if 'mbid' in artist_data and artist_data['mbid']:
                 mbid = artist_data['mbid']
-                print(f"🎵 Found MBID for '{lookup_name}': {mbid}")
+                logger.info("Found MBID from Last.fm", extra={'artist': lookup_name, 'mbid': mbid})
                 
                 # Try to fetch image from MusicBrainz first
                 mb_image_url = fetch_musicbrainz_image(mbid)
@@ -681,9 +761,9 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
                     cache_artist_image(artist_clean_name, mb_image_url, success=True, mbid=mbid)
                     return (mb_image_url, mbid)
                 else:
-                    print(f"🔄 MusicBrainz had no image, falling back to Last.fm for '{lookup_name}'")
+                    logger.debug("MusicBrainz had no image, falling back to Last.fm", extra={'artist': lookup_name})
             else:
-                print(f"❌ No MBID found for '{lookup_name}'")
+                logger.debug("No MBID found in Last.fm response", extra={'artist': lookup_name})
         
         # Check if artist data exists and try Last.fm images as fallback
         if 'artist' in data and 'image' in data['artist']:
@@ -699,24 +779,29 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
             # No image found but artist exists
             no_image_msg = "No image found"
             cache_artist_image(artist_clean_name, no_image_msg, success=False, error_message="No image available", mbid=mbid)
+            logger.warning("No image found for artist", extra={'artist': lookup_name})
             return (no_image_msg, mbid)
         else:
             # Artist not found
             not_found_msg = f"Artist not found: {lookup_name}"
             cache_artist_image(artist_clean_name, not_found_msg, success=False, error_message="Artist not found", mbid=mbid)
+            logger.warning("Artist not found in Last.fm", extra={'artist': lookup_name})
             return (not_found_msg, mbid)
             
     except requests.exceptions.Timeout:
         timeout_msg = f"Timeout for artist: {lookup_name}"
         cache_artist_image(artist_clean_name, timeout_msg, success=False, error_message="API timeout")
+        logger.error("API timeout", extra={'artist': lookup_name})
         return (timeout_msg, None)
     except requests.exceptions.RequestException as e:
         error_msg = f"Request error for {lookup_name}: {str(e)[:100]}"
         cache_artist_image(artist_clean_name, error_msg, success=False, error_message=str(e)[:100])
+        logger.error("API request error", extra={'artist': lookup_name, 'error': str(e)[:100]})
         return (error_msg, None)
     except json.JSONDecodeError:
         json_error_msg = f"Invalid JSON response for {lookup_name}"
         cache_artist_image(artist_clean_name, json_error_msg, success=False, error_message="Invalid JSON response")
+        logger.error("Invalid JSON response", extra={'artist': lookup_name})
         return (json_error_msg, None)
 
 def fetch_lastfm_track_info(artist_clean, song_clean, raw_artist=None, raw_song=None):
@@ -738,14 +823,14 @@ def fetch_lastfm_track_info(artist_clean, song_clean, raw_artist=None, raw_song=
     # Check cache first
     cached_result = get_track_info_from_cache(artist_clean, song_clean)
     if cached_result is not None:
-        print(f"🎯 Track cache hit for: {artist_clean} - {song_clean}")
+        logger.debug("Track cache hit", extra={'artist': artist_clean, 'song': song_clean})
         return cached_result
     
     # Use raw names for API lookup if provided, otherwise use clean names
     lookup_artist = raw_artist if raw_artist else artist_clean
     lookup_song = raw_song if raw_song else song_clean
     
-    print(f"🎵 Fetching track info from Last.fm: {lookup_artist} - {lookup_song}")
+    logger.info("Fetching track info from Last.fm", extra={'artist': lookup_artist, 'song': lookup_song})
     
     # Last.fm API key
     api_key = "9b38e4cb99aa0de263aa854e1582fad4" # @todo move to env var
@@ -789,9 +874,14 @@ def fetch_lastfm_track_info(artist_clean, song_clean, raw_artist=None, raw_song=
             if duration:
                 minutes = duration // 60
                 seconds = duration % 60
-                print(f"🕒 Found track duration: {minutes}:{seconds:02d} ({duration}s)")
+                logger.info("Found track duration", extra={
+                    'artist': lookup_artist, 'song': lookup_song,
+                    'duration_seconds': duration, 'duration_display': f"{minutes}:{seconds:02d}"
+                })
             if track_mbid:
-                print(f"🎵 Found track MBID: {track_mbid}")
+                logger.info("Found track MBID", extra={
+                    'artist': lookup_artist, 'song': lookup_song, 'track_mbid': track_mbid
+                })
             
             # Cache the result
             result = {
@@ -802,32 +892,34 @@ def fetch_lastfm_track_info(artist_clean, song_clean, raw_artist=None, raw_song=
                            track_mbid=track_mbid, success=True)
             return result
         else:
-            print(f"❌ Track not found: {lookup_artist} - {lookup_song}")
+            logger.warning("Track not found in Last.fm", extra={'artist': lookup_artist, 'song': lookup_song})
             cache_track_info(artist_clean, song_clean, success=False, 
                            error_message="Track not found")
             return None
             
     except requests.exceptions.Timeout:
-        print(f"⏰ Timeout for track: {lookup_artist} - {lookup_song}")
+        logger.error("API timeout for track", extra={'artist': lookup_artist, 'song': lookup_song})
         cache_track_info(artist_clean, song_clean, success=False, 
                        error_message="API timeout")
         return None
     except requests.exceptions.RequestException as e:
-        print(f"❌ Request error for track {lookup_artist} - {lookup_song}: {str(e)[:100]}")
+        logger.error("API request error for track", extra={
+            'artist': lookup_artist, 'song': lookup_song, 'error': str(e)[:100]
+        })
         cache_track_info(artist_clean, song_clean, success=False, 
                        error_message=str(e)[:100])
         return None
     except json.JSONDecodeError:
-        print(f"❌ Invalid JSON response for track: {lookup_artist} - {lookup_song}")
+        logger.error("Invalid JSON response for track", extra={'artist': lookup_artist, 'song': lookup_song})
         cache_track_info(artist_clean, song_clean, success=False, 
                        error_message="Invalid JSON response")
         return None
 
 def main():
   # Initialize database first
-  print("🗄️  Initializing database...")
+  logger.info("Initializing database")
   engine = init_database()
-  print("✅ Database initialized successfully")
+  logger.info("Database initialized successfully")
   
   spark,sc = init_spark()
 
@@ -879,35 +971,46 @@ def main():
           df_pandas = df_pandas.rename(columns={old_col: new_col})
   
   # Show some examples of cleaned names and timestamp parsing
-  print("🧹 Data processing results:")
+  logger.info("Data processing results")
   if 'artist_clean' in df_pandas.columns and 'raw_artist' in df_pandas.columns:
-      print(f"   • Cleaned {len(df_pandas)} artist names")
+      artist_count = len(df_pandas)
+      logger.info("Artist name cleaning completed", extra={'processed_count': artist_count})
       sample_artists = df_pandas[['raw_artist', 'artist_clean']].drop_duplicates().head(5)
       for _, row in sample_artists.iterrows():
-          print(f"     '{row['raw_artist']}' → '{row['artist_clean']}'")
+          logger.debug("Artist name cleaned", extra={
+              'raw_artist': row['raw_artist'], 'clean_artist': row['artist_clean']
+          })
   else:
-      print("   • Artist cleaning columns not found")
+      logger.warning("Artist cleaning columns not found")
       
   # Show song cleaning results
   if 'song_clean' in df_pandas.columns and 'raw_song' in df_pandas.columns:
-      print(f"   • Cleaned {len(df_pandas)} song titles")
+      song_count = len(df_pandas)
+      logger.info("Song title cleaning completed", extra={'processed_count': song_count})
       sample_songs = df_pandas[['raw_song', 'song_clean']].drop_duplicates().head(5)
       for _, row in sample_songs.iterrows():
-          print(f"     '{row['raw_song']}' → '{row['song_clean']}'")
+          logger.debug("Song title cleaned", extra={
+              'raw_song': row['raw_song'], 'clean_song': row['song_clean']
+          })
   else:
-      print("   • Song cleaning columns not found")
+      logger.warning("Song cleaning columns not found")
   
   # Show timestamp parsing results
   if 'time_unix' in df_pandas.columns and 'time' in df_pandas.columns:
       parsed_count = df_pandas['time_unix'].notna().sum()
-      print(f"   • Parsed {parsed_count}/{len(df_pandas)} timestamps successfully")
+      total_count = len(df_pandas)
+      logger.info("Timestamp parsing completed", extra={
+          'parsed_count': parsed_count, 'total_count': total_count
+      })
       if parsed_count > 0:
           # Show a few examples
           sample_times = df_pandas[df_pandas['time_unix'].notna()][['time', 'time_unix']].head(3)
           for _, row in sample_times.iterrows():
-              print(f"     '{row['time']}' → {row['time_unix']}")
+              logger.debug("Timestamp parsed", extra={
+                  'raw_time': row['time'], 'unix_time': row['time_unix']
+              })
   else:
-      print("   • Timestamp parsing columns not found")
+      logger.warning("Timestamp parsing columns not found")
   
   # Add placeholder columns for additional metadata
   df_pandas['artist_image_url'] = None
@@ -915,19 +1018,20 @@ def main():
   df_pandas['track_duration'] = None
   df_pandas['track_mbid'] = None
   
-  print(f"📋 Pandas DataFrame shape: {df_pandas.shape}")
-  print(f"📋 Pandas DataFrame columns: {list(df_pandas.columns)}")
+  logger.info("Pandas DataFrame created", extra={
+      'shape': str(df_pandas.shape), 'columns': list(df_pandas.columns)
+  })
   
   # Save initial data to database
-  print("\n💾 Saving initial data to database...")
+  logger.info("Saving initial data to database")
   save_success = save_dataframe_to_db(df_pandas, 'music_records')
   
   # Show unique cleaned artists (first 10)
-  print("\nUnique artists (first 10):")
+  logger.debug("Showing unique artists sample")
   unique_artists_df = df.select("RAW_ARTIST", "ARTIST_CLEAN").distinct()
   unique_artists_df.show(10)
   
-  print("\n🎵 Fetching artist images from Last.fm API...")
+  logger.info("Starting artist image fetching from Last.fm API")
   
   # Get unique cleaned artists to avoid duplicate API calls
   # Use cleaned names as cache keys for deduplication
@@ -936,7 +1040,7 @@ def main():
   
   # Get count of unique artists for logging
   unique_count = unique_artists_for_api.count()
-  print(f"\n🖼️  Processing {unique_count} unique artists for image URLs:")
+  logger.info("Processing unique artists for image URLs", extra={'unique_count': unique_count})
   unique_artists_for_api.show(10, truncate=False)
   
   # Convert to pandas to handle API calls with proper caching
@@ -947,7 +1051,7 @@ def main():
   artists_pandas['artist_image_url'] = None
   artists_pandas['artist_mbid'] = None
   
-  print("\n💾 Fetching and caching artist images...")
+  logger.info("Fetching and caching artist images")
   
   # Process each unique artist with optimized caching
   # Use cleaned name as cache key, but raw name for API lookup
@@ -956,7 +1060,7 @@ def main():
       artist_raw = row['raw_artist']
       
       # Fetch both image URL and MBID
-      print(f"🌐 Fetching for '{artist_raw}' (cache key: '{artist_clean}')")
+      logger.debug("Processing artist", extra={'raw_artist': artist_raw, 'cache_key': artist_clean})
       image_url, mbid = fetch_lastfm_artist_info(artist_clean, artist_raw)
       
       # Update the dataframe with both results
@@ -965,14 +1069,14 @@ def main():
           artists_pandas.loc[artists_pandas['artist_clean'] == artist_clean, 'artist_mbid'] = mbid
   
   # Fetch track information from Last.fm
-  print("\n🎵 Fetching track information from Last.fm API...")
+  logger.info("Starting track information fetching from Last.fm API")
   
   # Get unique artist/song combinations for track info
   unique_tracks = df.select("RAW_ARTIST", "RAW_SONG", "ARTIST_CLEAN", "SONG_CLEAN").distinct().limit(20)  # Limit for testing
   
   # Get count of unique tracks for logging
   track_count = unique_tracks.count()
-  print(f"\n🎶 Processing {track_count} unique tracks for duration and metadata:")
+  logger.info("Processing unique tracks for duration and metadata", extra={'track_count': track_count})
   unique_tracks.show(10, truncate=False)
   
   # Convert to pandas for track processing
@@ -1000,45 +1104,45 @@ def main():
               df_pandas.loc[mask, 'track_mbid'] = track_info['track_mbid']
   
   # Save updated DataFrame with track durations back to database
-  print("\n💾 Saving updated track duration data to database...")
+  logger.info("Saving updated track duration data to database")
   save_success = save_dataframe_to_db(df_pandas, 'music_records')
   
   if save_success:
-      print("✅ Track duration data saved successfully")
+      logger.info("Track duration data saved successfully")
   else:
-      print("❌ Failed to save track duration data")
+      logger.error("Failed to save track duration data")
   
   # Query database to show cached results
-  print("\n📊 Database Statistics:")
+  logger.info("Database Statistics")
   try:
       with engine.connect() as conn:
           # Count music records
           music_count = conn.execute(text("SELECT COUNT(*) FROM music_records")).scalar()
-          print(f"   📀 Music records in database: {music_count}")
+          logger.info("Music records in database", extra={'count': music_count})
           
           # Count records with parsed unix timestamps
           unix_count = conn.execute(text("SELECT COUNT(*) FROM music_records WHERE time_unix IS NOT NULL")).scalar()
-          print(f"   ⏰ Records with parsed timestamps: {unix_count}")
+          logger.info("Records with parsed timestamps", extra={'count': unix_count})
           
           # Count cached artists
           artist_count = conn.execute(text("SELECT COUNT(*) FROM artist_images")).scalar()
-          print(f"   🎭 Cached artists: {artist_count}")
+          logger.info("Cached artists", extra={'count': artist_count})
           
           # Count successful images
           success_count = conn.execute(text("SELECT COUNT(*) FROM artist_images WHERE fetch_success = 1")).scalar()
-          print(f"   ✅ Successful image fetches: {success_count}")
+          logger.info("Successful image fetches", extra={'count': success_count})
           
           # Count cached tracks
           track_cache_count = conn.execute(text("SELECT COUNT(*) FROM track_info")).scalar()
-          print(f"   🎵 Cached tracks: {track_cache_count}")
+          logger.info("Cached tracks", extra={'count': track_cache_count})
           
           # Count tracks with duration
           duration_count = conn.execute(text("SELECT COUNT(*) FROM track_info WHERE duration IS NOT NULL")).scalar()
-          print(f"   ⏱️  Tracks with duration: {duration_count}")
+          logger.info("Tracks with duration", extra={'count': duration_count})
           
           # Count records with track duration
           records_duration_count = conn.execute(text("SELECT COUNT(*) FROM music_records WHERE track_duration IS NOT NULL")).scalar()
-          print(f"   🕒 Records with track duration: {records_duration_count}")
+          logger.info("Records with track duration", extra={'count': records_duration_count})
           
           # Show sample cached artists
           print("\n🎭 Sample cached artists:")
@@ -1051,11 +1155,13 @@ def main():
           """)).fetchall()
           
           for artist in cached_artists:
-              print(f"   • {artist[0]}: {artist[1]} - {artist[2]}")
+              logger.debug("Cached artist sample", extra={
+                  'artist': artist[0], 'status': artist[1], 'image_preview': artist[2]
+              })
           
           # Show sample tracks with duration and normalized titles
           if track_cache_count > 0:
-              print(f"\n  Sample Tracks with Duration:")
+              logger.debug("Sample tracks with duration")
               cached_tracks = conn.execute(text("""
                   SELECT artist_clean, song_clean, duration,
                          SUBSTR(track_mbid, 1, 8) || '...' as mbid_preview
@@ -1068,11 +1174,13 @@ def main():
               for track in cached_tracks:
                   artist_clean, song_clean, duration, mbid_preview = track
                   duration_str = f"{int(duration // 60)}:{int(duration % 60):02d}" if duration else "N/A"
-                  print(f"   • {artist_clean} - {song_clean}")
-                  print(f"     Duration: {duration_str} | MBID: {mbid_preview}")
+                  logger.debug("Track with duration", extra={
+                      'artist': artist_clean, 'song': song_clean,
+                      'duration': duration_str, 'mbid_preview': mbid_preview
+                  })
           
           # Show top 10 artists by cumulative listening time
-          print(f"\n🎵 Top 10 Artists by Cumulative Listening Time:")
+          logger.info("Top 10 Artists by Cumulative Listening Time")
           top_artists = conn.execute(text("""
               SELECT 
                   mr.artist_clean,
@@ -1101,34 +1209,36 @@ def main():
           if top_artists:
               for i, (artist, plays, avg_dur, total_sec, total_time) in enumerate(top_artists, 1):
                   avg_duration_str = f"{int(avg_dur // 60)}:{int(avg_dur % 60):02d}" if avg_dur else "N/A"
-                  print(f"   {i:2d}. {artist}")
-                  print(f"       Plays: {plays:,} | Avg Duration: {avg_duration_str} | Total Time: {total_time}")
+                  logger.info("Top artist by listening time", extra={
+                      'rank': i, 'artist': artist, 'plays': plays,
+                      'avg_duration': avg_duration_str, 'total_time': total_time
+                  })
           else:
-              print("   No artists with duration data found")
+              logger.warning("No artists with duration data found")
               
   except Exception as e:
-      print(f"Error querying database: {str(e)}")
+      logger.error("Error querying database", extra={'error': str(e)})
   
   # Demonstrate pandas integration
-  print("\n🐼 Pandas Integration Demo:")
+  logger.info("Pandas Integration Demo")
   try:
       # Read data back from database using pandas
       df_from_db = pd.read_sql("SELECT * FROM music_records LIMIT 3", engine)
-      print("Sample records from database:")
-      print(df_from_db[['raw_artist', 'raw_song', 'callsign']].to_string(index=False))
+      logger.debug("Sample records from database")
+      logger.debug(df_from_db[['raw_artist', 'raw_song', 'callsign']].to_string(index=False))
       
       # Show artist image cache
       artist_cache_df = pd.read_sql("SELECT * FROM artist_images", engine)
-      print(f"\nArtist cache contains {len(artist_cache_df)} entries")
+      logger.info("Artist cache summary", extra={'entries': len(artist_cache_df)})
       
   except Exception as e:
-      print(f"Error with pandas database operations: {str(e)}")
+      logger.error("Error with pandas database operations", extra={'error': str(e)})
   
   # hello world test (keeping original for reference)
   nums = sc.parallelize([1,2,3,4])
-  print(f"\n🔢 Original test - squares: {nums.map(lambda x: x*x).collect()}")
+  logger.debug("Original test - squares", extra={'result': nums.map(lambda x: x*x).collect()})
   
-  print("\n🎉 Application completed successfully!")
+  logger.info("Application completed successfully")
 
 
 if __name__ == '__main__':
