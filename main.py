@@ -140,7 +140,7 @@ def main():
     # Get unique cleaned artists to avoid duplicate API calls
     # Use cleaned names as cache keys for deduplication
     # unique_artists_for_api = df.select("RAW_ARTIST", "ARTIST_CLEAN").distinct()
-    unique_artists_for_api = df.select("RAW_ARTIST", "ARTIST_CLEAN").distinct().limit(10)  # Limit for demo purposes
+    unique_artists_for_api = df.select("RAW_ARTIST", "ARTIST_CLEAN").distinct().limit(10) # Limit for testing
     
     # Get count of unique artists for logging
     unique_count = unique_artists_for_api.count()

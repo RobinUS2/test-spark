@@ -59,9 +59,24 @@ def fetch_lastfm_artist_info(artist_clean_name: str, artist_full_name: Optional[
             'format': 'json'
         }
         
+        # Debug log the full URL being requested
+        logger.debug("Making Last.fm API request", extra={
+            'artist': lookup_name,
+            'url': url,
+            'params': {k: v if k != 'api_key' else '***' for k, v in params.items()}
+        })
+        
         # Make the API request with timeout
         time.sleep(settings.processing.api_delay)  # Configured API rate limiting
         response = requests.get(url, params=params, timeout=settings.api.request_timeout)
+        
+        # Log response status for debugging
+        logger.debug("Last.fm API response", extra={
+            'artist': lookup_name,
+            'status_code': response.status_code,
+            'url': response.url
+        })
+        
         response.raise_for_status()
         
         data = response.json()

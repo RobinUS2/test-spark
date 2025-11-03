@@ -28,8 +28,8 @@ Sqlalchemy for DB connection with pandas. Into a local SQLite given the amount o
 
 Implemented the dual layer image lookup with caching via database (to reduce API calls, in production might want something like redis instead of SQL for caching; albeit easier to debug now, hence keeping that). 
 
-## Image fetching
-Via lastFm to MusicBrainz (LastFm stopped exposing images), bit of a little nightmare, but works here and there. The code currently limits the amount of artists and tracks fetched from external APIs to prevent rate limits being hit.
+## Image & canonical name fetching
+Via lastFm to MusicBrainz (LastFm stopped exposing real images it seems), bit of a little nightmare, but works here and there. The code currently *limits* the amount of artists and tracks fetched from external APIs to prevent rate limits being hit and too long test runtimes. (see # Limit for testing )
 
 ```
 Fetching for 'Creed' (cache key: 'Creed')
