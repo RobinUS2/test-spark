@@ -62,11 +62,35 @@ def export_to_csv(db_path):
             cursor.execute("SELECT * FROM track_info")
             writer.writerows(cursor.fetchall())
         
+        # Export distinct Last.fm artist names
+        print("Exporting distinct Last.fm artists to distinct_artists.csv...")
+        
+        with open('distinct_artists.csv', 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            
+            # Write header
+            writer.writerow(['artist_name'])
+            
+            # Write data - distinct Last.fm artist names with play counts
+            cursor.execute("""
+                SELECT DISTINCT 
+                    artist_lastfm as artist_name
+                FROM music_records 
+                WHERE artist_lastfm IS NOT NULL 
+                  AND artist_lastfm != ''
+                  AND artist_lastfm != 'None'
+                  AND TRIM(artist_lastfm) != ''
+                GROUP BY artist_lastfm
+                ORDER BY COUNT(*) DESC, artist_lastfm ASC
+            """)
+            writer.writerows(cursor.fetchall())
+        
         conn.close()
         print("CSV export completed successfully!")
         print("   • music_records.csv")
         print("   • artist_images.csv")
         print("   • track_info.csv")
+        print("   • distinct_artists.csv")
         
     except Exception as e:
         print(f"Export error: {e}")
