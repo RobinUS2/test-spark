@@ -49,15 +49,13 @@ Simple structured logger implemented.
 
 
 ## Todos
-- @todo structured logger, update log verbosities, get rid of emojis, just show those as INFO records and set rest to DEBUG/TRACE
-- @todo use the artist name from lastfm as normalized clean value and use that for display in stats
-- @todo check output for errors
-- @todo cleanup below
+- @todo check output for errors/warnings
 - @Todo remove lastfm api key into os env
 - @todo more explanation on what and why
 - @todo check if logical split versus regex in py vs pandas for cleaning? not entirely sure sound like should be pandas
-- @todo cleanup read_db.py is duplicate probably, or maybe get rid of the copy bash script
-- @todo structure project, file names (e.g. hello.py), split files, move scripts into a folder, split functions if needed etc
+- @todo check final files for mess
+- @todo cleanup __pycache__ folder in git
+- @todo final clean + push into RS repo
 
 ## To make it more production ready
 - @todo connect to gcp spark cluster + postgres maybe if time allows?
