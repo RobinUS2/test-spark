@@ -28,7 +28,7 @@ docker run --rm -it $(docker build -q .)
 Simple SQLite for now, given the filesize, switching to postgres would be simple
 
 ## Architecture
-Local docker setup for portability, yet simplicity. Could've done something full cloud / docker compose, but given the data set size and time constraints would like to keep it relatively simple, yet prepare for later scale increase; hence Spark as distributed processing framework. 
+Local docker setup for portability, yet simplicity. Could've done something full cloud / docker compose, but given the data set size and time constraints would like to keep it relatively simple, yet prepare for later scale increase; hence Spark as distributed processing framework. Chose language and frameworks based on some research and Rockstars commonly used techniques to try this out, learn and show the case in the most relevant context. 
 
 Sqlalchemy for DB connection with pandas. Into a local SQLite given the amount of data again, yet a configuration tool to be able to switch to more persistent and scalable Postgresin a production (cloud) environment. 
 
