@@ -560,8 +560,8 @@ def print_database_statistics():
             top_artists = conn.execute(text("""
                 SELECT 
                     COALESCE(mr.artist_lastfm, mr.artist_clean) as display_name,
-                    mr.artist_clean,
-                    mr.artist_lastfm,
+                    MIN(mr.artist_clean) as artist_clean,
+                    MIN(mr.artist_lastfm) as artist_lastfm,
                     COUNT(*) as play_count,
                     AVG(mr.track_duration) as avg_duration_seconds,
                     SUM(mr.track_duration) as total_listening_seconds,
@@ -579,7 +579,7 @@ def print_database_statistics():
                 WHERE mr.track_duration IS NOT NULL 
                   AND mr.track_duration > 0
                   AND mr.artist_clean IS NOT NULL
-                GROUP BY COALESCE(mr.artist_lastfm, mr.artist_clean), mr.artist_clean, mr.artist_lastfm
+                GROUP BY COALESCE(mr.artist_lastfm, mr.artist_clean)
                 ORDER BY SUM(mr.track_duration) DESC
                 LIMIT 10
             """)).fetchall()
@@ -594,6 +594,46 @@ def print_database_statistics():
                     })
             else:
                 logger.warning("No artists with duration data found")
+            
+            # Show bottom 10 artists by cumulative listening time
+            logger.info("Bottom 10 Artists by Cumulative Listening Time")
+            bottom_artists = conn.execute(text("""
+                SELECT 
+                    COALESCE(mr.artist_lastfm, mr.artist_clean) as display_name,
+                    MIN(mr.artist_clean) as artist_clean,
+                    MIN(mr.artist_lastfm) as artist_lastfm,
+                    COUNT(*) as play_count,
+                    AVG(mr.track_duration) as avg_duration_seconds,
+                    SUM(mr.track_duration) as total_listening_seconds,
+                    CASE 
+                        WHEN SUM(mr.track_duration) >= 3600 THEN 
+                            CAST(SUM(mr.track_duration) / 3600 AS TEXT) || 'h ' || 
+                            CAST((SUM(mr.track_duration) % 3600) / 60 AS TEXT) || 'm'
+                        WHEN SUM(mr.track_duration) >= 60 THEN 
+                            CAST(SUM(mr.track_duration) / 60 AS TEXT) || 'm ' ||
+                            CAST(SUM(mr.track_duration) % 60 AS TEXT) || 's'
+                        ELSE 
+                            CAST(SUM(mr.track_duration) AS TEXT) || 's'
+                    END as total_listening_time
+                FROM music_records mr
+                WHERE mr.track_duration IS NOT NULL 
+                  AND mr.track_duration > 0
+                  AND mr.artist_clean IS NOT NULL
+                GROUP BY COALESCE(mr.artist_lastfm, mr.artist_clean)
+                ORDER BY SUM(mr.track_duration) ASC
+                LIMIT 10
+            """)).fetchall()
+            
+            if bottom_artists:
+                for i, (display_name, artist_clean, artist_lastfm, plays, avg_dur, total_sec, total_time) in enumerate(bottom_artists, 1):
+                    avg_duration_str = f"{int(avg_dur // 60)}:{int(avg_dur % 60):02d}" if avg_dur else "N/A"
+                    logger.info("Bottom artist by listening time", extra={
+                        'rank': i, 'artist_display': display_name, 'artist_clean': artist_clean,
+                        'artist_lastfm': artist_lastfm, 'plays': plays,
+                        'avg_duration': avg_duration_str, 'total_time': total_time
+                    })
+            else:
+                logger.warning("No bottom artists with duration data found")
                 
     except Exception as e:
         logger.error("Error querying database", extra={'error': str(e)})
