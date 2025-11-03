@@ -3,5 +3,4 @@ artist_images.csv
 music_data.db
 track_info.csv
 distinct_artists.csv
-testdata.txt
 __pycache__/**
