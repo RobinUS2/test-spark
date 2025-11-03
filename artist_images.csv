@@ -1,0 +1,11 @@
+id,artist_name,image_url,mbid,fetch_success,error_message,created_at,updated_at
+1,JOAN JETT and the Blackhearts,https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png,46e63d3b-d91b-4791-bb73-e9f638a45ea0,1,,2025-11-03 10:19:34.521695,2025-11-03 10:19:34.521697
+2,Rory Gallagher,https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png,933fdeae-ec68-48e9-a752-8bcfd44bc429,1,,2025-11-03 10:19:34.975843,2025-11-03 10:19:34.975845
+3,Stephen Stills,https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png,5642774a-72c0-4099-8da4-7c1ab36378a8,1,,2025-11-03 10:19:35.342404,2025-11-03 10:19:35.342407
+4,"""""""Oh""",No image found,,0,No image available,2025-11-03 10:19:35.560728,2025-11-03 10:19:35.560731
+5,Bruce Hornsby and the Range,https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png,b548040e-b631-4bdd-ab75-045293e448b7,1,,2025-11-03 10:19:35.923731,2025-11-03 10:19:35.923734
+6,Creed,https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png,4b1a830b-0a1f-42e5-b8d5-1d6743912e99,1,,2025-11-03 10:19:36.245090,2025-11-03 10:19:36.245094
+7,One Beer (Live),Artist not found:  One Beer (Live),,0,Artist not found,2025-11-03 10:19:36.712952,2025-11-03 10:19:36.712961
+8,Jonathan Richman,https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png,bae34b81-9abd-416e-a720-fedc359df775,1,,2025-11-03 10:19:37.095114,2025-11-03 10:19:37.095119
+9,Kenny Wayne Shepherd,https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png,,1,,2025-11-03 10:19:37.341089,2025-11-03 10:19:37.341094
+10,Lynyrd Skynyrd,https://lastfm.freetls.fastly.net/i/u/300x300/2a96cbd8b46e442fc41c2b86b821562f.png,c544ed4d-2390-4442-a83e-1ea2883b09c8,1,,2025-11-03 10:19:37.665230,2025-11-03 10:19:37.665233
