@@ -5,6 +5,7 @@ FROM apache/spark-py:latest
 USER root
 RUN pip install requests
 RUN pip install pandas sqlalchemy
+RUN pip install rapidfuzz
 
 # Create data directory for SQLite database
 RUN mkdir -p /app/data && chmod 777 /app/data
@@ -27,6 +28,9 @@ RUN chmod +x /app/setup_db.sh
 ENV SPARK_HOME=/opt/spark
 ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
 ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-*.zip
+
+# Optional: Last.fm API key (can be overridden at runtime)
+# ENV LASTFM_API_KEY=your_api_key_here
 
 # Run the Python script using spark-submit
 CMD ["spark-submit", "--master", "local[*]", "/app/main.py"]

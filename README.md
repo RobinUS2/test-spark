@@ -8,10 +8,16 @@ python main.py
 # run locally
 docker run -it apache/spark-py /opt/spark/bin/pyspark
 
-# build and run in one go
-docker run --rm -it $(docker build -q .)
+# build and run with automatic API key passing
+./run.sh
 
 ## Usage
+
+### Environment Configuration
+```bash
+# Optional: Set Last.fm API key for enhanced artist metadata
+export LASTFM_API_KEY="your_lastfm_api_key_here"
+```
 
 ### Data Setup
 ```bash
@@ -50,7 +56,6 @@ Simple structured logger implemented. Time felt relatively constrained to do all
 
 
 ## Todos
-- @Todo remove lastfm api key into os env
 - @todo more explanation on what and why
 - @todo check final files for mess
 - @todo ask for feedback on project, anti patterns, code smells

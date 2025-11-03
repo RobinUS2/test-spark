@@ -4,6 +4,7 @@ Last.fm API integration for artist and track information
 """
 
 import json
+import os
 import time
 import logging
 from typing import Optional, Tuple, Dict, Any
@@ -17,7 +18,10 @@ from musicbrainz_api import fetch_musicbrainz_image
 logger = logging.getLogger(__name__)
 
 # Last.fm API configuration
-LASTFM_API_KEY = "9b38e4cb99aa0de263aa854e1582fad4"  # @todo move to env var
+LASTFM_API_KEY = os.getenv('LASTFM_API_KEY', '')  # Fallback for demo purposes
+
+if not LASTFM_API_KEY or LASTFM_API_KEY == 'your_api_key_here':
+    logger.warning("LASTFM_API_KEY not properly configured. Set the LASTFM_API_KEY environment variable for production use.")
 
 
 def fetch_lastfm_artist_info(artist_clean_name: str, artist_full_name: Optional[str] = None) -> Tuple[str, Optional[str], Optional[str]]:
