@@ -4,3 +4,20 @@ music_data.db
 track_info.csv
 distinct_artists.csv
 __pycache__/**
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore virtual environments
+venv/
+.env/
+
+# Ignore temporary files
+*.log
+*.tmp
+*.swp
+
+# Ignore IDE/project files
+.vscode/
+.idea/

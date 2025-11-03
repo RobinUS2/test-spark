@@ -10,17 +10,18 @@ import logging
 from typing import Optional, Tuple, Dict, Any
 
 import requests
-
-from database import cache_artist_image, cache_track_info, get_artist_image_from_cache, get_track_info_from_cache, get_database_engine, ArtistImage
 from sqlalchemy.orm import sessionmaker
+
+from config.settings import settings
+from repositories.database_repository import db_repo
+from models.database_models import ArtistImage
+from models.data_classes import ArtistCacheEntry, TrackCacheEntry
 from musicbrainz_api import fetch_musicbrainz_image
 
 logger = logging.getLogger(__name__)
 
-# Last.fm API configuration
-LASTFM_API_KEY = os.getenv('LASTFM_API_KEY', '')  # Fallback for demo purposes
-
-if not LASTFM_API_KEY or LASTFM_API_KEY == 'your_api_key_here':
+# Last.fm API configuration from settings
+if not settings.api.lastfm_api_key or settings.api.lastfm_api_key == 'your_api_key_here':
     logger.warning("LASTFM_API_KEY not properly configured. Set the LASTFM_API_KEY environment variable for production use.")
 
 
@@ -42,11 +43,11 @@ def fetch_lastfm_artist_info(artist_clean_name: str, artist_full_name: Optional[
     lookup_name = artist_full_name if artist_full_name else artist_clean_name
     
     # Check cache first using cleaned name as key
-    cached_result = get_artist_image_from_cache(artist_clean_name)
+    cached_result = db_repo.get_artist_image_from_cache(artist_clean_name)
     if cached_result is not None:
         logger.debug("Artist cache hit", extra={'artist': artist_clean_name})
         # Get MBID and canonical name from cache too        
-        engine = get_database_engine()
+        engine = db_repo.get_database_engine()
         Session = sessionmaker(bind=engine)
         session = Session()
         try:
@@ -67,14 +68,14 @@ def fetch_lastfm_artist_info(artist_clean_name: str, artist_full_name: Optional[
         url = "https://ws.audioscrobbler.com/2.0/"
         params = {
             'method': 'artist.getinfo',
-            'artist': lookup_name.strip(),
-            'api_key': LASTFM_API_KEY,
+            'artist': lookup_name,
+            'api_key': settings.api.lastfm_api_key,
             'format': 'json'
         }
         
         # Make the API request with timeout
-        time.sleep(0.25)  # Be nice to the API
-        response = requests.get(url, params=params, timeout=10)
+        time.sleep(settings.processing.api_delay)  # Configured API rate limiting
+        response = requests.get(url, params=params, timeout=settings.api.request_timeout)
         response.raise_for_status()
         
         data = response.json()
@@ -101,7 +102,14 @@ def fetch_lastfm_artist_info(artist_clean_name: str, artist_full_name: Optional[
                 # Try to fetch image from MusicBrainz first
                 mb_image_url = fetch_musicbrainz_image(mbid)
                 if mb_image_url:
-                    cache_artist_image(artist_clean_name, mb_image_url, success=True, mbid=mbid, artist_lastfm=artist_lastfm)
+                    cache_entry = ArtistCacheEntry(
+                        artist_name=artist_clean_name,
+                        image_url=mb_image_url,
+                        success=True,
+                        mbid=mbid,
+                        artist_lastfm=artist_lastfm
+                    )
+                    db_repo.cache_artist_image(cache_entry)
                     return (mb_image_url, mbid, artist_lastfm)
                 else:
                     logger.debug("MusicBrainz had no image, falling back to Last.fm", extra={'artist': lookup_name})
@@ -116,34 +124,75 @@ def fetch_lastfm_artist_info(artist_clean_name: str, artist_full_name: Optional[
                 if img.get('#text') and img.get('#text').strip():
                     image_url = img['#text']
                     # Cache successful result using cleaned name as key
-                    cache_artist_image(artist_clean_name, image_url, success=True, mbid=mbid, artist_lastfm=artist_lastfm)
+                    cache_entry = ArtistCacheEntry(
+                        artist_name=artist_clean_name,
+                        image_url=image_url,
+                        success=True,
+                        mbid=mbid,
+                        artist_lastfm=artist_lastfm
+                    )
+                    db_repo.cache_artist_image(cache_entry)
                     return (image_url, mbid, artist_lastfm)
             
             # No image found but artist exists
             no_image_msg = "No image found"
-            cache_artist_image(artist_clean_name, no_image_msg, success=False, error_message="No image available", mbid=mbid, artist_lastfm=artist_lastfm)
+            cache_entry = ArtistCacheEntry(
+                artist_name=artist_clean_name,
+                image_url=no_image_msg,
+                success=False,
+                error_message="No image available",
+                mbid=mbid,
+                artist_lastfm=artist_lastfm
+            )
+            db_repo.cache_artist_image(cache_entry)
             logger.warning("No image found for artist", extra={'artist': lookup_name})
             return (no_image_msg, mbid, artist_lastfm)
         else:
             # Artist not found
             not_found_msg = f"Artist not found: {lookup_name}"
-            cache_artist_image(artist_clean_name, not_found_msg, success=False, error_message="Artist not found", mbid=mbid, artist_lastfm=artist_lastfm)
+            cache_entry = ArtistCacheEntry(
+                artist_name=artist_clean_name,
+                image_url=not_found_msg,
+                success=False,
+                error_message="Artist not found",
+                mbid=mbid,
+                artist_lastfm=artist_lastfm
+            )
+            db_repo.cache_artist_image(cache_entry)
             logger.warning("Artist not found in Last.fm", extra={'artist': lookup_name})
             return (not_found_msg, mbid, artist_lastfm)
             
     except requests.exceptions.Timeout:
         timeout_msg = f"Timeout for artist: {lookup_name}"
-        cache_artist_image(artist_clean_name, timeout_msg, success=False, error_message="API timeout")
+        cache_entry = ArtistCacheEntry(
+            artist_name=artist_clean_name,
+            image_url=timeout_msg,
+            success=False,
+            error_message="API timeout"
+        )
+        db_repo.cache_artist_image(cache_entry)
         logger.error("API timeout", extra={'artist': lookup_name})
         return (timeout_msg, None, None)
     except requests.exceptions.RequestException as e:
         error_msg = f"Request error for {lookup_name}: {str(e)[:100]}"
-        cache_artist_image(artist_clean_name, error_msg, success=False, error_message=str(e)[:100])
+        cache_entry = ArtistCacheEntry(
+            artist_name=artist_clean_name,
+            image_url=error_msg,
+            success=False,
+            error_message=str(e)[:100]
+        )
+        db_repo.cache_artist_image(cache_entry)
         logger.error("API request error", extra={'artist': lookup_name, 'error': str(e)[:100]})
         return (error_msg, None, None)
     except json.JSONDecodeError:
         json_error_msg = f"Invalid JSON response for {lookup_name}"
-        cache_artist_image(artist_clean_name, json_error_msg, success=False, error_message="Invalid JSON response")
+        cache_entry = ArtistCacheEntry(
+            artist_name=artist_clean_name,
+            image_url=json_error_msg,
+            success=False,
+            error_message="Invalid JSON response"
+        )
+        db_repo.cache_artist_image(cache_entry)
         logger.error("Invalid JSON response", extra={'artist': lookup_name})
         return (json_error_msg, None, None)
 
@@ -165,7 +214,7 @@ def fetch_lastfm_track_info(artist_clean: str, song_clean: str, raw_artist: Opti
         return None
     
     # Check cache first
-    cached_result = get_track_info_from_cache(artist_clean, song_clean)
+    cached_result = db_repo.get_track_info_from_cache(artist_clean, song_clean)
     if cached_result is not None:
         logger.debug("Track cache hit", extra={'artist': artist_clean, 'song': song_clean})
         return cached_result
@@ -183,13 +232,13 @@ def fetch_lastfm_track_info(artist_clean: str, song_clean: str, raw_artist: Opti
             'method': 'track.getinfo',
             'artist': lookup_artist.strip(),
             'track': lookup_song.strip(),
-            'api_key': LASTFM_API_KEY,
+            'api_key': settings.api.lastfm_api_key,
             'format': 'json'
         }
         
         # Make the API request with timeout
-        time.sleep(0.25)  # Be nice to the API
-        response = requests.get(url, params=params, timeout=10)
+        time.sleep(settings.processing.api_delay)  # Configured API rate limiting
+        response = requests.get(url, params=params, timeout=settings.api.request_timeout)
         response.raise_for_status()
         
         data = response.json()
@@ -246,30 +295,57 @@ def fetch_lastfm_track_info(artist_clean: str, song_clean: str, raw_artist: Opti
                 'artist_lastfm': artist_lastfm,
                 'song_lastfm': song_lastfm
             }
-            cache_track_info(artist_clean, song_clean, duration=duration, 
-                           track_mbid=track_mbid, artist_lastfm=artist_lastfm, 
-                           song_lastfm=song_lastfm, success=True)
+            cache_entry = TrackCacheEntry(
+                artist_clean=artist_clean,
+                song_clean=song_clean,
+                duration=duration,
+                track_mbid=track_mbid,
+                artist_lastfm=artist_lastfm,
+                song_lastfm=song_lastfm,
+                success=True
+            )
+            db_repo.cache_track_info(cache_entry)
             return result
         else:
             logger.warning("Track not found in Last.fm", extra={'artist': lookup_artist, 'song': lookup_song})
-            cache_track_info(artist_clean, song_clean, success=False, 
-                           error_message="Track not found")
+            cache_entry = TrackCacheEntry(
+                artist_clean=artist_clean,
+                song_clean=song_clean,
+                success=False,
+                error_message="Track not found"
+            )
+            db_repo.cache_track_info(cache_entry)
             return None
             
     except requests.exceptions.Timeout:
         logger.error("API timeout for track", extra={'artist': lookup_artist, 'song': lookup_song})
-        cache_track_info(artist_clean, song_clean, success=False, 
-                       error_message="API timeout")
+        cache_entry = TrackCacheEntry(
+            artist_clean=artist_clean,
+            song_clean=song_clean,
+            success=False,
+            error_message="API timeout"
+        )
+        db_repo.cache_track_info(cache_entry)
         return None
     except requests.exceptions.RequestException as e:
         logger.error("API request error for track", extra={
             'artist': lookup_artist, 'song': lookup_song, 'error': str(e)[:100]
         })
-        cache_track_info(artist_clean, song_clean, success=False, 
-                       error_message=str(e)[:100])
+        cache_entry = TrackCacheEntry(
+            artist_clean=artist_clean,
+            song_clean=song_clean,
+            success=False,
+            error_message=str(e)[:100]
+        )
+        db_repo.cache_track_info(cache_entry)
         return None
     except json.JSONDecodeError:
         logger.error("Invalid JSON response for track", extra={'artist': lookup_artist, 'song': lookup_song})
-        cache_track_info(artist_clean, song_clean, success=False, 
-                       error_message="Invalid JSON response")
+        cache_entry = TrackCacheEntry(
+            artist_clean=artist_clean,
+            song_clean=song_clean,
+            success=False,
+            error_message="Invalid JSON response"
+        )
+        db_repo.cache_track_info(cache_entry)
         return None

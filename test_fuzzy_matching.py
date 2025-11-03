@@ -7,7 +7,8 @@ import logging
 import sys
 sys.path.append('.')
 
-from database import normalize_artist_names_in_db, get_database_engine
+from repositories.database_repository import db_repo
+from services.artist_normalization_service import artist_service
 from utils import setup_logging
 
 def test_fuzzy_normalization():
@@ -24,14 +25,14 @@ def test_fuzzy_normalization():
         logger.info(f"Testing with threshold: {threshold}")
         
         try:
-            normalizations = normalize_artist_names_in_db(fuzzy_threshold=threshold)
+            normalizations = artist_service.normalize_artist_names_in_db(fuzzy_threshold=threshold)
             logger.info("Normalization results", extra={
                 'threshold': threshold,
                 'normalizations_found': normalizations
             })
             
             # Show some examples by querying the database
-            engine = get_database_engine()
+            engine = db_repo.get_database_engine()
             with engine.connect() as conn:
                 from sqlalchemy import text
                 result = conn.execute(text("""

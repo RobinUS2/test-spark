@@ -38,9 +38,10 @@ setup_postgresql() {
     echo "   User: $DB_USER"
     echo "   Password: [HIDDEN]"
     
-    # Update the DB_CONFIG type in database.py
-    sed -i "s/'type': 'sqlite'/'type': 'postgresql'/" database.py
-    echo "Updated database.py to use PostgreSQL"
+    # Update the database type in configuration
+    export DATABASE_TYPE=postgresql
+    echo "Set DATABASE_TYPE=postgresql environment variable"
+    echo "Note: Configuration is now handled via config/settings.py"
 }
 
 # Function to setup SQLite
@@ -50,9 +51,10 @@ setup_sqlite() {
     # Ensure data directory exists
     mkdir -p /app/data
     
-    # Update the DB_CONFIG type in database.py  
-    sed -i "s/'type': 'postgresql'/'type': 'sqlite'/" database.py
-    echo "Updated database.py to use SQLite"
+    # Update the database type in configuration
+    export DATABASE_TYPE=sqlite
+    echo "Set DATABASE_TYPE=sqlite environment variable"
+    echo "Note: Configuration is now handled via config/settings.py"
     echo "   Database file: /app/data/music_data.db"
 }
 

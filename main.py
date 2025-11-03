@@ -8,7 +8,9 @@ from pyspark.sql.functions import udf, col
 from pyspark.sql.types import StringType, IntegerType
 
 from utils import setup_logging, parse_time_to_unix, clean_artist_name, clean_song_title, init_spark
-from database import init_database, save_dataframe_to_db, print_database_statistics, demonstrate_pandas_integration, normalize_artist_names_in_db
+from repositories.database_repository import db_repo
+from services.artist_normalization_service import artist_service
+from services.statistics_service import stats_service
 from lastfm_api import fetch_lastfm_artist_info, fetch_lastfm_track_info
 
 # Set up logging
@@ -19,7 +21,7 @@ def main():
     """Main application entry point"""
     # Initialize database first
     logger.info("Initializing database")
-    engine = init_database()
+    engine = db_repo.init_database()
     logger.info("Database initialized successfully")
     
     # Test database connection
@@ -149,7 +151,7 @@ def main():
     
     # Save initial data to database
     logger.info("Saving initial data to database")
-    save_success = save_dataframe_to_db(df_pandas, 'music_records')
+    save_success = db_repo.save_dataframe_to_db(df_pandas, 'music_records')
     
     # Show unique cleaned artists (first 10)
     logger.debug("Showing unique artists sample")
@@ -241,7 +243,7 @@ def main():
     
     # Save updated DataFrame with track durations back to database
     logger.info("Saving updated track duration data to database")
-    save_success = save_dataframe_to_db(df_pandas, 'music_records')
+    save_success = db_repo.save_dataframe_to_db(df_pandas, 'music_records')
     
     if save_success:
         logger.info("Track duration data saved successfully")
@@ -249,16 +251,16 @@ def main():
         # Normalize artist names to handle "The" variants and fuzzy matches
         logger.info("Normalizing artist names for consistency (including fuzzy matching)")
         fuzzy_threshold = 90.0  # Adjust this value to be more/less strict (0-100)
-        normalizations = normalize_artist_names_in_db(fuzzy_threshold=fuzzy_threshold)
+        normalizations = artist_service.normalize_artist_names_in_db(fuzzy_threshold=fuzzy_threshold)
         logger.info("Artist normalization completed", extra={'normalizations': normalizations})
     else:
         logger.error("Failed to save track duration data")
     
     # Query database to show cached results
-    print_database_statistics()
+    stats_service.print_database_statistics()
     
     # Demonstrate pandas integration
-    demonstrate_pandas_integration()
+    stats_service.demonstrate_pandas_integration()
     
     # hello world test (keeping original for reference)
     nums = sc.parallelize([1, 2, 3, 4])

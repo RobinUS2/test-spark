@@ -161,4 +161,5 @@ jobs:
         
     - name: Test Python syntax
       run: |
-        python -m py_compile main.py utils.py database.py lastfm_api.py musicbrainz_api.py
+        python -m py_compile main.py utils.py lastfm_api.py musicbrainz_api.py
+        python -m py_compile models/*.py services/*.py repositories/*.py config/*.py

@@ -17,9 +17,12 @@ WORKDIR /app
 # Copy the Python modules and data files to the container
 COPY main.py /app/
 COPY utils.py /app/
-COPY database.py /app/
 COPY lastfm_api.py /app/
 COPY musicbrainz_api.py /app/
+COPY models/ /app/models/
+COPY services/ /app/services/
+COPY repositories/ /app/repositories/
+COPY config/ /app/config/
 COPY testdata.txt /app/
 COPY setup_db.sh /app/
 RUN chmod +x /app/setup_db.sh
@@ -28,9 +31,6 @@ RUN chmod +x /app/setup_db.sh
 ENV SPARK_HOME=/opt/spark
 ENV PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
 ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-*.zip
-
-# Optional: Last.fm API key (can be overridden at runtime)
-# ENV LASTFM_API_KEY=your_api_key_here
 
 # Run the Python script using spark-submit
 CMD ["spark-submit", "--master", "local[*]", "/app/main.py"]
