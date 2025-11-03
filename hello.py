@@ -90,6 +90,8 @@ class MusicRecord(Base):
     raw_artist = Column(String(200))
     song_clean = Column(String(500))  # Cleaned version of song title
     artist_clean = Column(String(200))  # Cleaned version of artist name
+    artist_lastfm = Column(String(200))  # Canonical artist name from Last.fm API
+    song_lastfm = Column(String(500))  # Canonical song name from Last.fm API
     callsign = Column(String(50))
     time = Column(String(50))  # Store as string initially, can convert to DateTime later, probably unix timestamp
     time_unix = Column(Integer)  # Parsed unix timestamp in seconds
@@ -108,7 +110,8 @@ class ArtistImage(Base):
     __tablename__ = 'artist_images'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    artist_name = Column(String(200), unique=True, index=True)
+    artist_name = Column(String(200), unique=True, index=True)  # Cache key (cleaned name)
+    artist_lastfm = Column(String(200))  # Canonical artist name from Last.fm
     image_url = Column(String(1000))
     mbid = Column(String(100))  # MusicBrainz ID
     fetch_success = Column(Boolean, default=True)
@@ -121,8 +124,10 @@ class TrackInfo(Base):
     __tablename__ = 'track_info'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    artist_clean = Column(String(200), index=True)
-    song_clean = Column(String(500), index=True)
+    artist_clean = Column(String(200), index=True)  # Cache key (cleaned name)
+    song_clean = Column(String(500), index=True)    # Cache key (cleaned name)
+    artist_lastfm = Column(String(200))  # Canonical artist name from Last.fm
+    song_lastfm = Column(String(500))    # Canonical song name from Last.fm
     duration = Column(Integer)  # Duration in seconds
     track_mbid = Column(String(100))  # Track MusicBrainz ID
     fetch_success = Column(Boolean, default=True)
@@ -504,7 +509,7 @@ def clean_song_title(raw_song):
     
     return song
 
-def cache_artist_image(artist_name, image_url, success=True, error_message=None, mbid=None):
+def cache_artist_image(artist_name, image_url, success=True, error_message=None, mbid=None, artist_lastfm=None):
     """Cache artist image result in database"""
     engine = get_database_engine()
     Session = sessionmaker(bind=engine)
@@ -520,6 +525,7 @@ def cache_artist_image(artist_name, image_url, success=True, error_message=None,
             # Update existing record
             existing.image_url = image_url
             existing.mbid = mbid
+            existing.artist_lastfm = artist_lastfm
             existing.fetch_success = success
             existing.error_message = error_message
             existing.updated_at = datetime.utcnow()
@@ -527,6 +533,7 @@ def cache_artist_image(artist_name, image_url, success=True, error_message=None,
             # Create new record
             new_image = ArtistImage(
                 artist_name=artist_name.strip(),
+                artist_lastfm=artist_lastfm,
                 image_url=image_url,
                 mbid=mbid,
                 fetch_success=success,
@@ -580,7 +587,7 @@ def get_track_info_from_cache(artist_clean, song_clean):
     finally:
         session.close()
 
-def cache_track_info(artist_clean, song_clean, duration=None, track_mbid=None, success=True, error_message=None):
+def cache_track_info(artist_clean, song_clean, duration=None, track_mbid=None, success=True, error_message=None, artist_lastfm=None, song_lastfm=None):
     """Cache track information result in database"""
     engine = get_database_engine()
     Session = sessionmaker(bind=engine)
@@ -597,6 +604,8 @@ def cache_track_info(artist_clean, song_clean, duration=None, track_mbid=None, s
             # Update existing record
             existing.duration = duration
             existing.track_mbid = track_mbid
+            existing.artist_lastfm = artist_lastfm
+            existing.song_lastfm = song_lastfm
             existing.fetch_success = success
             existing.error_message = error_message
             existing.updated_at = datetime.utcnow()
@@ -605,6 +614,8 @@ def cache_track_info(artist_clean, song_clean, duration=None, track_mbid=None, s
             new_track = TrackInfo(
                 artist_clean=artist_clean.strip(),
                 song_clean=song_clean.strip(),
+                artist_lastfm=artist_lastfm,
+                song_lastfm=song_lastfm,
                 duration=duration,
                 track_mbid=track_mbid,
                 fetch_success=success,
@@ -690,17 +701,17 @@ def fetch_musicbrainz_image(mbid):
 
 def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
     """
-    Fetch artist image URL and MBID from Last.fm API with MusicBrainz fallback
+    Fetch artist image URL, MBID, and canonical name from Last.fm API with MusicBrainz fallback
     
     Args:
         artist_clean_name (str): Cleaned artist name used as cache key
         artist_full_name (str): Full/original artist name used for API lookup (optional)
         
     Returns:
-        tuple: (image_url, mbid) where either can be None
+        tuple: (image_url, mbid, artist_lastfm) where any can be None
     """
     if not artist_clean_name or artist_clean_name.strip() == "":
-        return ("No artist name provided", None)
+        return ("No artist name provided", None, None)
     
     # Use full name for API lookup if provided, otherwise use clean name
     lookup_name = artist_full_name if artist_full_name else artist_clean_name
@@ -709,7 +720,7 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
     cached_result = get_artist_image_from_cache(artist_clean_name)
     if cached_result is not None:
         logger.debug("Artist cache hit", extra={'artist': artist_clean_name})
-        # Get MBID from cache too
+        # Get MBID and canonical name from cache too
         engine = get_database_engine()
         Session = sessionmaker(bind=engine)
         session = Session()
@@ -718,7 +729,8 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
                 ArtistImage.artist_name == artist_clean_name.strip()
             ).first()
             cached_mbid = cached_record.mbid if cached_record else None
-            return (cached_result, cached_mbid)
+            cached_artist_lastfm = cached_record.artist_lastfm if cached_record else None
+            return (cached_result, cached_mbid, cached_artist_lastfm)
         finally:
             session.close()
     
@@ -746,9 +758,17 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
         
         # Debug: Log the full API response structure to see available fields
         mbid = None
+        artist_lastfm = None
         if 'artist' in data:
             artist_data = data['artist']
             logger.debug("Last.fm API response fields", extra={'artist': lookup_name, 'fields': list(artist_data.keys())})
+            
+            # Extract canonical artist name from Last.fm
+            if 'name' in artist_data and artist_data['name']:
+                artist_lastfm = artist_data['name'].strip()
+                logger.info("Found canonical artist name from Last.fm", extra={
+                    'original': lookup_name, 'canonical': artist_lastfm
+                })
             
             # Check for MBID (MusicBrainz ID)
             if 'mbid' in artist_data and artist_data['mbid']:
@@ -758,8 +778,8 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
                 # Try to fetch image from MusicBrainz first
                 mb_image_url = fetch_musicbrainz_image(mbid)
                 if mb_image_url:
-                    cache_artist_image(artist_clean_name, mb_image_url, success=True, mbid=mbid)
-                    return (mb_image_url, mbid)
+                    cache_artist_image(artist_clean_name, mb_image_url, success=True, mbid=mbid, artist_lastfm=artist_lastfm)
+                    return (mb_image_url, mbid, artist_lastfm)
                 else:
                     logger.debug("MusicBrainz had no image, falling back to Last.fm", extra={'artist': lookup_name})
             else:
@@ -773,40 +793,40 @@ def fetch_lastfm_artist_info(artist_clean_name, artist_full_name=None):
                 if img.get('#text') and img.get('#text').strip():
                     image_url = img['#text']
                     # Cache successful result using cleaned name as key
-                    cache_artist_image(artist_clean_name, image_url, success=True, mbid=mbid)
-                    return (image_url, mbid)
+                    cache_artist_image(artist_clean_name, image_url, success=True, mbid=mbid, artist_lastfm=artist_lastfm)
+                    return (image_url, mbid, artist_lastfm)
             
             # No image found but artist exists
             no_image_msg = "No image found"
-            cache_artist_image(artist_clean_name, no_image_msg, success=False, error_message="No image available", mbid=mbid)
+            cache_artist_image(artist_clean_name, no_image_msg, success=False, error_message="No image available", mbid=mbid, artist_lastfm=artist_lastfm)
             logger.warning("No image found for artist", extra={'artist': lookup_name})
-            return (no_image_msg, mbid)
+            return (no_image_msg, mbid, artist_lastfm)
         else:
             # Artist not found
             not_found_msg = f"Artist not found: {lookup_name}"
-            cache_artist_image(artist_clean_name, not_found_msg, success=False, error_message="Artist not found", mbid=mbid)
+            cache_artist_image(artist_clean_name, not_found_msg, success=False, error_message="Artist not found", mbid=mbid, artist_lastfm=artist_lastfm)
             logger.warning("Artist not found in Last.fm", extra={'artist': lookup_name})
-            return (not_found_msg, mbid)
+            return (not_found_msg, mbid, artist_lastfm)
             
     except requests.exceptions.Timeout:
         timeout_msg = f"Timeout for artist: {lookup_name}"
         cache_artist_image(artist_clean_name, timeout_msg, success=False, error_message="API timeout")
         logger.error("API timeout", extra={'artist': lookup_name})
-        return (timeout_msg, None)
+        return (timeout_msg, None, None)
     except requests.exceptions.RequestException as e:
         error_msg = f"Request error for {lookup_name}: {str(e)[:100]}"
         cache_artist_image(artist_clean_name, error_msg, success=False, error_message=str(e)[:100])
         logger.error("API request error", extra={'artist': lookup_name, 'error': str(e)[:100]})
-        return (error_msg, None)
+        return (error_msg, None, None)
     except json.JSONDecodeError:
         json_error_msg = f"Invalid JSON response for {lookup_name}"
         cache_artist_image(artist_clean_name, json_error_msg, success=False, error_message="Invalid JSON response")
         logger.error("Invalid JSON response", extra={'artist': lookup_name})
-        return (json_error_msg, None)
+        return (json_error_msg, None, None)
 
 def fetch_lastfm_track_info(artist_clean, song_clean, raw_artist=None, raw_song=None):
     """
-    Fetch track information from Last.fm API including duration and MBID
+    Fetch track information from Last.fm API including duration, MBID, and canonical names
     
     Args:
         artist_clean (str): Cleaned artist name used as cache key
@@ -815,7 +835,7 @@ def fetch_lastfm_track_info(artist_clean, song_clean, raw_artist=None, raw_song=
         raw_song (str): Original song title for API lookup (optional)
         
     Returns:
-        dict: Track info with duration and track_mbid, or None if failed
+        dict: Track info with duration, track_mbid, artist_lastfm, song_lastfm or None if failed
     """
     if not artist_clean or not song_clean or artist_clean.strip() == "" or song_clean.strip() == "":
         return None
@@ -855,6 +875,20 @@ def fetch_lastfm_track_info(artist_clean, song_clean, raw_artist=None, raw_song=
         if 'track' in data:
             track_data = data['track']
             
+            # Extract canonical names from Last.fm
+            artist_lastfm = None
+            song_lastfm = None
+            if 'artist' in track_data and 'name' in track_data['artist']:
+                artist_lastfm = track_data['artist']['name'].strip()
+            if 'name' in track_data:
+                song_lastfm = track_data['name'].strip()
+            
+            if artist_lastfm or song_lastfm:
+                logger.info("Found canonical names from Last.fm", extra={
+                    'original_artist': lookup_artist, 'canonical_artist': artist_lastfm,
+                    'original_song': lookup_song, 'canonical_song': song_lastfm
+                })
+            
             # Extract duration (in seconds)
             duration = None
             if 'duration' in track_data and track_data['duration']:
@@ -886,10 +920,13 @@ def fetch_lastfm_track_info(artist_clean, song_clean, raw_artist=None, raw_song=
             # Cache the result
             result = {
                 'duration': duration,
-                'track_mbid': track_mbid
+                'track_mbid': track_mbid,
+                'artist_lastfm': artist_lastfm,
+                'song_lastfm': song_lastfm
             }
             cache_track_info(artist_clean, song_clean, duration=duration, 
-                           track_mbid=track_mbid, success=True)
+                           track_mbid=track_mbid, artist_lastfm=artist_lastfm, 
+                           song_lastfm=song_lastfm, success=True)
             return result
         else:
             logger.warning("Track not found in Last.fm", extra={'artist': lookup_artist, 'song': lookup_song})
@@ -1015,8 +1052,10 @@ def main():
   # Add placeholder columns for additional metadata
   df_pandas['artist_image_url'] = None
   df_pandas['artist_mbid'] = None
+  df_pandas['artist_lastfm'] = None
   df_pandas['track_duration'] = None
   df_pandas['track_mbid'] = None
+  df_pandas['song_lastfm'] = None
   
   logger.info("Pandas DataFrame created", extra={
       'shape': str(df_pandas.shape), 'columns': list(df_pandas.columns)
@@ -1059,14 +1098,19 @@ def main():
       artist_clean = row['artist_clean']
       artist_raw = row['raw_artist']
       
-      # Fetch both image URL and MBID
+      # Fetch image URL, MBID, and canonical name
       logger.debug("Processing artist", extra={'raw_artist': artist_raw, 'cache_key': artist_clean})
-      image_url, mbid = fetch_lastfm_artist_info(artist_clean, artist_raw)
+      image_url, mbid, artist_lastfm = fetch_lastfm_artist_info(artist_clean, artist_raw)
       
-      # Update the dataframe with both results
+      # Update the dataframe with all results
       artists_pandas.loc[artists_pandas['artist_clean'] == artist_clean, 'artist_image_url'] = image_url
       if mbid:  # Only update MBID if we have one
           artists_pandas.loc[artists_pandas['artist_clean'] == artist_clean, 'artist_mbid'] = mbid
+          
+      # Update main dataframe with canonical artist name from Last.fm
+      if artist_lastfm:
+          mask = df_pandas['artist_clean'] == artist_clean
+          df_pandas.loc[mask, 'artist_lastfm'] = artist_lastfm
   
   # Fetch track information from Last.fm
   logger.info("Starting track information fetching from Last.fm API")
@@ -1102,6 +1146,12 @@ def main():
           
           if track_info.get('track_mbid'):
               df_pandas.loc[mask, 'track_mbid'] = track_info['track_mbid']
+              
+          if track_info.get('artist_lastfm'):
+              df_pandas.loc[mask, 'artist_lastfm'] = track_info['artist_lastfm']
+              
+          if track_info.get('song_lastfm'):
+              df_pandas.loc[mask, 'song_lastfm'] = track_info['song_lastfm']
   
   # Save updated DataFrame with track durations back to database
   logger.info("Saving updated track duration data to database")
@@ -1183,7 +1233,9 @@ def main():
           logger.info("Top 10 Artists by Cumulative Listening Time")
           top_artists = conn.execute(text("""
               SELECT 
+                  COALESCE(mr.artist_lastfm, mr.artist_clean) as display_name,
                   mr.artist_clean,
+                  mr.artist_lastfm,
                   COUNT(*) as play_count,
                   AVG(mr.track_duration) as avg_duration_seconds,
                   SUM(mr.track_duration) as total_listening_seconds,
@@ -1201,16 +1253,17 @@ def main():
               WHERE mr.track_duration IS NOT NULL 
                 AND mr.track_duration > 0
                 AND mr.artist_clean IS NOT NULL
-              GROUP BY mr.artist_clean
+              GROUP BY COALESCE(mr.artist_lastfm, mr.artist_clean), mr.artist_clean, mr.artist_lastfm
               ORDER BY SUM(mr.track_duration) DESC
               LIMIT 10
           """)).fetchall()
           
           if top_artists:
-              for i, (artist, plays, avg_dur, total_sec, total_time) in enumerate(top_artists, 1):
+              for i, (display_name, artist_clean, artist_lastfm, plays, avg_dur, total_sec, total_time) in enumerate(top_artists, 1):
                   avg_duration_str = f"{int(avg_dur // 60)}:{int(avg_dur % 60):02d}" if avg_dur else "N/A"
                   logger.info("Top artist by listening time", extra={
-                      'rank': i, 'artist': artist, 'plays': plays,
+                      'rank': i, 'artist_display': display_name, 'artist_clean': artist_clean,
+                      'artist_lastfm': artist_lastfm, 'plays': plays,
                       'avg_duration': avg_duration_str, 'total_time': total_time
                   })
           else:
@@ -1235,6 +1288,7 @@ def main():
       logger.error("Error with pandas database operations", extra={'error': str(e)})
   
   # hello world test (keeping original for reference)
+  # @todo cleanup
   nums = sc.parallelize([1,2,3,4])
   logger.debug("Original test - squares", extra={'result': nums.map(lambda x: x*x).collect()})
   
