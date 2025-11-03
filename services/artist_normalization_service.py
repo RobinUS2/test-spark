@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""
-Business logic services for music data processing
-
-This module contains the business logic for artist name normalization,
-fuzzy matching, and data quality improvements.
-"""
+"""Artist name normalization and fuzzy matching service"""
 
 import logging
 from typing import List, Tuple, Dict
@@ -25,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class ArtistNormalizationService:
-    """Service for normalizing and deduplicating artist names"""
     
     def __init__(self):
         self.well_known_the_bands = {
@@ -35,21 +29,7 @@ class ArtistNormalizationService:
         }
     
     def normalize_artist_names_in_db(self, fuzzy_threshold: float = None) -> int:
-        """
-        Normalize artist names by checking if 'The' versions exist and using fuzzy matching.
-        
-        Logic:
-        1. Find all artist_clean names and get their play counts
-        2. Use fuzzy matching to find similar artist names that might be duplicates
-        3. Handle "The" prefix variants with smart rules
-        4. Update all records to use the preferred version consistently
-        
-        Args:
-            fuzzy_threshold: Override default fuzzy matching threshold
-            
-        Returns:
-            Number of normalizations applied
-        """
+        """Normalize artist names using 'The' prefix rules and fuzzy matching"""
         if fuzzy_threshold is None:
             fuzzy_threshold = settings.processing.fuzzy_threshold
             
@@ -62,7 +42,6 @@ class ArtistNormalizationService:
                     'fuzzy_available': RAPIDFUZZ_AVAILABLE
                 })
                 
-                # Get all distinct artist_clean names with counts
                 result = conn.execute(text("""
                     SELECT DISTINCT artist_clean, COUNT(*) as count 
                     FROM music_records 

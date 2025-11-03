@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""
-Data classes for API cache entries and parameters
-
-These dataclasses replace long parameter lists and improve code maintainability
-by providing type safety and clear structure for complex data.
-"""
+"""Data classes for API cache entries and parameters"""
 
 from dataclasses import dataclass
 from typing import Optional
@@ -13,10 +8,6 @@ from datetime import datetime
 
 @dataclass
 class ArtistCacheEntry:
-    """Data class for artist image cache entries
-    
-    Replaces the long parameter list in cache_artist_image function
-    """
     artist_name: str
     image_url: str
     success: bool = True
@@ -27,10 +18,6 @@ class ArtistCacheEntry:
 
 @dataclass
 class TrackCacheEntry:
-    """Data class for track information cache entries
-    
-    Replaces the long parameter list in cache_track_info function
-    """
     artist_clean: str
     song_clean: str
     duration: Optional[int] = None
@@ -43,7 +30,6 @@ class TrackCacheEntry:
 
 @dataclass
 class ArtistMatch:
-    """Data class for fuzzy artist matching results"""
     original_name: str
     canonical_name: str
     similarity_score: float
@@ -52,7 +38,6 @@ class ArtistMatch:
 
 @dataclass
 class DatabaseStats:
-    """Data class for database statistics"""
     music_records_count: int
     records_with_timestamps: int
     cached_artists: int

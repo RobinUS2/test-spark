@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""
-Configuration settings for the music data pipeline
-
-This module centralizes all configuration values and explains magic numbers
-to improve maintainability and transparency.
-"""
+"""Configuration settings for the music data pipeline"""
 
 import os
 from dataclasses import dataclass, field
@@ -13,11 +8,10 @@ from typing import Optional
 
 @dataclass
 class DatabaseConfig:
-    """Database configuration settings"""
-    type: str = field(default_factory=lambda: os.getenv('DATABASE_TYPE', 'sqlite'))  # 'sqlite' or 'postgresql'
+    type: str = field(default_factory=lambda: os.getenv('DATABASE_TYPE', 'sqlite'))
     sqlite_path: str = './music_data.db'
     
-    # PostgreSQL config (used when type='postgresql')
+    # PostgreSQL config
     host: str = field(default_factory=lambda: os.getenv('DB_HOST', 'localhost'))
     port: int = field(default_factory=lambda: int(os.getenv('DB_PORT', '5432')))
     database: str = field(default_factory=lambda: os.getenv('DB_NAME', 'music_data'))
@@ -29,45 +23,22 @@ class DatabaseConfig:
 class ProcessingConfig:
     """Data processing configuration with explained magic numbers"""
     
-    # Batch size for database operations
-    # WHY 1000: Optimal balance for SQLite transactions
-    # - Small enough to avoid memory issues with large datasets (37K+ records)
-    # - Large enough to minimize transaction overhead
-    # - SQLite handles 1000 inserts efficiently in a single transaction
+    # SQLite transaction batch size (1000 = optimal for 37K+ records)
     batch_size: int = field(default_factory=lambda: int(os.getenv('BATCH_SIZE', '1000')))
     
-    # Fuzzy matching threshold for artist name deduplication
-    # WHY 90%: Empirically determined for music data quality
-    # - 95%: Too strict, misses valid variants like "The Beatles" vs "Beatles"
-    # - 85%: Too loose, creates false matches between different artists
-    # - 90%: Sweet spot that catches real duplicates without false positives
+    # Fuzzy matching threshold (90% catches duplicates without false matches, see test test_fuzzy_matching_accuracy)
     fuzzy_threshold: float = field(default_factory=lambda: float(os.getenv('FUZZY_THRESHOLD', '90.0')))
     
-    # API rate limiting delay
-    # WHY 0.1 seconds: Respectful API usage without being overly cautious
-    # - Last.fm API allows 5 requests/second for registered users
-    # - 0.1s = 10 requests/second maximum, staying well within limits
-    # - Prevents 429 (Too Many Requests) errors
+    # API rate limit (0.1s = 10 req/sec, under Last.fm limit)
     api_delay: float = field(default_factory=lambda: float(os.getenv('API_DELAY', '0.1')))
     
-    # Maximum number of API calls per session
-    # WHY 100: Conservative limit for development/demo
-    # - Prevents accidental expensive API usage during testing
-    # - Production deployments should increase this or remove the limit
-    # - Allows reasonable data enrichment without hitting quotas
+    # Conservative API call limit for dev/demo
     max_api_calls: int = field(default_factory=lambda: int(os.getenv('MAX_API_CALLS', '100')))
 
 
 @dataclass
 class APIConfig:
-    """External API configuration"""
     lastfm_api_key: str = field(default_factory=lambda: os.getenv('LASTFM_API_KEY', ''))
-    
-    # API timeout settings
-    # WHY 10 seconds: Balance between reliability and performance
-    # - 5s: Too short, may fail on slow networks
-    # - 30s: Too long, blocks processing pipeline
-    # - 10s: Reasonable for most network conditions
     request_timeout: int = field(default_factory=lambda: int(os.getenv('API_TIMEOUT', '10')))
 
 

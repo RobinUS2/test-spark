@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
-"""
-SQLAlchemy database models for the music data pipeline
-"""
+"""SQLAlchemy database models"""
 
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 
-# SQLAlchemy Base
 Base = declarative_base()
 
 
 class MusicRecord(Base):
-    """SQLAlchemy model for music records"""
     __tablename__ = 'music_records'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -37,7 +33,6 @@ class MusicRecord(Base):
 
 
 class ArtistImage(Base):
-    """SQLAlchemy model for artist image cache"""
     __tablename__ = 'artist_images'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -52,7 +47,6 @@ class ArtistImage(Base):
 
 
 class TrackInfo(Base):
-    """SQLAlchemy model for track information cache"""
     __tablename__ = 'track_info'
     
     id = Column(Integer, primary_key=True, autoincrement=True)

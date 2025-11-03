@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Last.fm API integration for artist and track information
-"""
+"""Last.fm API integration"""
 
 import json
 import os
@@ -26,27 +24,15 @@ if not settings.api.lastfm_api_key or settings.api.lastfm_api_key == 'your_api_k
 
 
 def fetch_lastfm_artist_info(artist_clean_name: str, artist_full_name: Optional[str] = None) -> Tuple[str, Optional[str], Optional[str]]:
-    """
-    Fetch artist image URL, MBID, and canonical name from Last.fm API with MusicBrainz fallback
-    
-    Args:
-        artist_clean_name (str): Cleaned artist name used as cache key
-        artist_full_name (str): Full/original artist name used for API lookup (optional)
-        
-    Returns:
-        tuple: (image_url, mbid, artist_lastfm) where any can be None
-    """
+    """Fetch artist image URL, MBID, and canonical name from Last.fm API with MusicBrainz fallback"""
     if not artist_clean_name or artist_clean_name.strip() == "":
         return ("No artist name provided", None, None)
     
-    # Use full name for API lookup if provided, otherwise use clean name
     lookup_name = artist_full_name if artist_full_name else artist_clean_name
     
-    # Check cache first using cleaned name as key
     cached_result = db_repo.get_artist_image_from_cache(artist_clean_name)
     if cached_result is not None:
         logger.debug("Artist cache hit", extra={'artist': artist_clean_name})
-        # Get MBID and canonical name from cache too        
         engine = db_repo.get_database_engine()
         Session = sessionmaker(bind=engine)
         session = Session()

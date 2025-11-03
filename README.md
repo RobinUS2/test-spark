@@ -1,16 +1,3 @@
-# random notes
-# local testing
-brew install openjdk@17 
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-python -c "import os; print(os.environ.get('JAVA_HOME'))"
-python main.py
-
-# run locally
-docker run -it apache/spark-py /opt/spark/bin/pyspark
-
-# build and run with automatic API key passing
-./run.sh
-
 ## Usage
 
 ### Environment Configuration
@@ -29,6 +16,7 @@ export LASTFM_API_KEY="your_lastfm_api_key_here"
 ./setup_db.sh sqlite    # Configure for local SQLite usage
 ./copy_docker_db_to_local.sh  # Copy database from Docker container
 ./export.sh             # Export database tables to CSV files
+# check files *.csv
 ```
 
 Simple SQLite for now, given the filesize, switching to postgres would be simple
@@ -56,9 +44,6 @@ Simple structured logger implemented. Time felt relatively constrained to do all
 
 
 ## Todos
-- @todo more explanation on what and why
-- @todo check final files for mess
-- @todo ask for feedback on project, anti patterns, code smells
 
 ## To make it more production ready
 - @todo connect to gcp spark cluster + postgres maybe if time allows?

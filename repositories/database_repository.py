@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""
-Database repository layer for music data operations
-
-This module handles all database interactions and provides a clean interface
-for data access operations.
-"""
+"""Database repository for music data operations"""
 
 import logging
 import pandas as pd
@@ -21,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseRepository:
-    """Repository class for database operations"""
     
     def __init__(self):
         self.engine = None
@@ -37,16 +31,13 @@ class DatabaseRepository:
                     db_url, 
                     echo=False,
                     connect_args={
-                        # WHY 30 seconds: Prevents timeout during large batch operations
-                        # SQLite locks during writes, need enough time for batch processing
-                        'timeout': 30,  
-                        'check_same_thread': False  # Allow sharing across threads
+                        'timeout': 30,  # Prevent timeout during batch operations
+                        'check_same_thread': False
                     },
-                    pool_pre_ping=True,  # Verify connections before use
-                    pool_recycle=3600,  # Recycle connections after 1 hour
+                    pool_pre_ping=True,
+                    pool_recycle=3600
                 )
             else:
-                # PostgreSQL connection
                 db_url = (f"postgresql://{settings.database.username}:{settings.database.password}"
                          f"@{settings.database.host}:{settings.database.port}/{settings.database.database}")
                 self.engine = create_engine(
@@ -56,19 +47,16 @@ class DatabaseRepository:
                     pool_recycle=3600,
                 )
             
-            # Create session factory
             self.Session = sessionmaker(bind=self.engine)
         
         return self.engine
     
     def init_database(self):
-        """Initialize database and create tables"""
         try:
             engine = self.get_database_engine()
             logger.info("Creating database tables if they don't exist")
             Base.metadata.create_all(engine)
             
-            # Test that we can connect and query
             with engine.connect() as conn:
                 result = conn.execute(text("SELECT 1"))
                 logger.info("Database initialization and connection test successful")
@@ -79,7 +67,6 @@ class DatabaseRepository:
             raise
     
     def save_dataframe_to_db(self, df_pandas: pd.DataFrame, table_name: str = 'music_records') -> bool:
-        """Save DataFrame to database with intelligent batching"""
         if df_pandas.empty:
             logger.warning("Empty DataFrame provided, nothing to save")
             return False

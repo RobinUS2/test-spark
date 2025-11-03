@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Main application for processing music data with Last.fm API integration
-"""
+"""Music data processing with Last.fm + MusicBrainz API integration"""
 
 import logging
 from pyspark.sql.functions import udf, col
@@ -13,18 +11,14 @@ from services.artist_normalization_service import artist_service
 from services.statistics_service import stats_service
 from lastfm_api import fetch_lastfm_artist_info, fetch_lastfm_track_info
 
-# Set up logging
 logger = setup_logging()
 
 
 def main():
-    """Main application entry point"""
-    # Initialize database first
     logger.info("Initializing database")
     engine = db_repo.init_database()
     logger.info("Database initialized successfully")
     
-    # Test database connection
     try:
         from sqlalchemy import text
         with engine.connect() as conn:
@@ -36,13 +30,10 @@ def main():
     
     spark, sc = init_spark()
 
-    # Register UDFs
     clean_artist_udf = udf(clean_artist_name, StringType())
     clean_song_udf = udf(clean_song_title, StringType())
     parse_time_udf = udf(parse_time_to_unix, IntegerType())
 
-    # Read testdata.txt using PySpark
-    # Read as DataFrame with semicolon separator
     df = spark.read.option("delimiter", ";").option("header", "true").csv("/app/testdata.txt")
     
     logger.info("Schema of the data:")
@@ -51,7 +42,6 @@ def main():
     logger.info("Column names:")
     logger.info(str(df.columns))
     
-    # Debug: Check if specific columns exist
     if "RAW_ARTIST" in df.columns:
         logger.info("RAW_ARTIST column found")
     else:
@@ -67,35 +57,22 @@ def main():
     
     logger.info(f"Total number of records: {df.count()}")
     
-    # Clean artist and song names using UDFs
     df = df.withColumn("ARTIST_CLEAN", clean_artist_udf(col("RAW_ARTIST")))
     df = df.withColumn("SONG_CLEAN", clean_song_udf(col("RAW_SONG")))
     df = df.withColumn("TIME_UNIX", parse_time_udf(col("TIME")))
     
-    # Convert to pandas for easier handling and database operations
     df_pandas = df.toPandas()
-    
-    # Normalize column names to match our database model
     df_pandas.columns = [column_name.lower().replace('?', '_question').replace(' ', '_') for column_name in df_pandas.columns]
     
-    # Keep only the columns we need for our database model
     required_columns = ['raw_song', 'raw_artist', 'song_clean', 'artist_clean', 'callsign', 'time', 'time_unix', 'unique_id', 'combined', 'first_question']
-    
-    # Filter to only required columns that exist
     available_columns = [column_name for column_name in required_columns if column_name in df_pandas.columns]
     df_pandas = df_pandas[available_columns].copy()
     
-    # Rename columns to match our database model
-    column_mapping = {
-        'first_question': 'first_play'  # first? -> first_question -> first_play
-    }
-    
-    # Apply column renames
+    column_mapping = {'first_question': 'first_play'}
     for old_col, new_col in column_mapping.items():
         if old_col in df_pandas.columns:
             df_pandas = df_pandas.rename(columns={old_col: new_col})
     
-    # Show some examples of cleaned names and timestamp parsing
     logger.info("Data processing results")
     if 'artist_clean' in df_pandas.columns and 'raw_artist' in df_pandas.columns:
         artist_count = len(df_pandas)
