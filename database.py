@@ -6,13 +6,20 @@ Database models, operations, and statistics for the music data pipeline
 import os
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 
 import pandas as pd
 import sqlalchemy as sa
 from sqlalchemy import create_engine, text, Column, Integer, String, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
+try:
+    from rapidfuzz import fuzz, process
+    RAPIDFUZZ_AVAILABLE = True
+except ImportError:
+    RAPIDFUZZ_AVAILABLE = False
+    logging.warning("rapidfuzz not available - fuzzy matching disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -133,22 +140,128 @@ def init_database():
         raise
 
 
-def normalize_artist_names_in_db():
+def find_fuzzy_artist_matches(artists: List[Tuple[str, int]], threshold: float = 90.0) -> Dict[str, str]:
     """
-    Normalize artist names by checking if 'The' versions exist and using consistent spelling.
+    Find fuzzy matches between artist names using rapidfuzz.
+    
+    Args:
+        artists: List of tuples (artist_name, play_count)
+        threshold: Minimum similarity score to consider a match
+        
+    Returns:
+        Dict mapping artist names to their preferred canonical form
+    """
+    if not RAPIDFUZZ_AVAILABLE:
+        logger.warning("rapidfuzz not available - skipping fuzzy matching")
+        return {}
+    
+    normalizations = {}
+    processed = set()
+    
+    # Sort by play count (descending) so popular artists become canonical
+    sorted_artists = sorted(artists, key=lambda x: x[1], reverse=True)
+    
+    for i, (artist, count) in enumerate(sorted_artists):
+        if artist.lower() in processed:
+            continue
+            
+        # Find similar artists
+        matches = []
+        for j, (other_artist, other_count) in enumerate(sorted_artists):
+            if i == j or other_artist.lower() in processed:
+                continue
+                
+            # Calculate similarity
+            similarity = fuzz.ratio(artist.lower(), other_artist.lower())
+            
+            if similarity >= threshold:
+                matches.append((other_artist, other_count, similarity))
+        
+        if matches:
+            # This artist has fuzzy matches
+            all_variants = [(artist, count)] + matches
+            
+            # Choose canonical form using smart rules
+            canonical = choose_canonical_artist_name(all_variants)
+            
+            # Mark all variants for normalization to canonical form
+            for variant in all_variants:
+                variant_name = variant[0]
+                if variant_name.lower() != canonical.lower():
+                    normalizations[variant_name.lower()] = canonical
+                processed.add(variant_name.lower())
+            
+            processed.add(canonical.lower())
+            
+            logger.info("Fuzzy match group found", extra={
+                'canonical': canonical,
+                'variants': [v[0] for v in all_variants],
+                'similarities': [v[2] if len(v) > 2 else 100.0 for v in all_variants]
+            })
+    
+    return normalizations
+
+
+def choose_canonical_artist_name(variants: List[Tuple]) -> str:
+    """
+    Choose the canonical form from a list of artist name variants.
+    
+    Args:
+        variants: List of tuples (name, count, similarity_score?) - similarity_score is optional
+        
+    Returns:
+        The preferred canonical name
+    """
+    # Well-known bands that should have "The" prefix
+    well_known_the_bands = {
+        'rolling stones', 'beatles', 'who', 'police', 'doors', 
+        'cars', 'guess who', 'doobie brothers', 'black crowes',
+        'eagles', 'kinks', 'clash', 'cure', 'smiths'
+    }
+    
+    # Check if any variant should have "The" prefix
+    for variant in variants:
+        name = variant[0]
+        count = variant[1]
+        # Handle both 2-tuple (name, count) and 3-tuple (name, count, similarity) cases
+        
+        base_name = name.lower().replace('the ', '', 1) if name.lower().startswith('the ') else name.lower()
+        if base_name in well_known_the_bands:
+            # Find the "The" version if it exists, otherwise create it
+            for other_variant in variants:
+                variant_name = other_variant[0]
+                if variant_name.lower().startswith('the ') and variant_name.lower().replace('the ', '', 1) == base_name:
+                    return variant_name
+            # Create "The" version
+            return f"The {name.title()}" if not name.lower().startswith('the ') else name
+    
+    # No special "The" handling needed, use the version with most plays
+    return max(variants, key=lambda x: x[1])[0]
+
+
+def normalize_artist_names_in_db(fuzzy_threshold: float = 90.0):
+    """
+    Normalize artist names by checking if 'The' versions exist and using fuzzy matching.
     
     Logic:
-    1. Find all artist_clean names that could have 'The' variants (e.g., 'Beatles' vs 'The Beatles')
-    2. For each pair, check which version has more records or if only one exists
-    3. Update all records to use the preferred version consistently
+    1. Find all artist_clean names and get their play counts
+    2. Use fuzzy matching to find similar artist names that might be duplicates
+    3. Handle "The" prefix variants with smart rules
+    4. Update all records to use the preferred version consistently
+    
+    Args:
+        fuzzy_threshold (float): Minimum similarity score (0-100) to consider artists as matches
     """
     engine = get_database_engine()
     
     try:
         with engine.connect() as conn:
-            logger.info("Starting artist name normalization")
+            logger.info("Starting enhanced artist name normalization", extra={
+                'fuzzy_threshold': fuzzy_threshold,
+                'fuzzy_available': RAPIDFUZZ_AVAILABLE
+            })
             
-            # Get all distinct artist_clean names
+            # Get all distinct artist_clean names with counts
             result = conn.execute(text("""
                 SELECT DISTINCT artist_clean, COUNT(*) as count 
                 FROM music_records 
@@ -157,126 +270,123 @@ def normalize_artist_names_in_db():
                 ORDER BY COUNT(*) DESC
             """))
             
-            artists = result.fetchall()
+            artists = [(row[0], row[1]) for row in result.fetchall()]
             logger.info("Found artists to analyze", extra={'count': len(artists)})
             
-            # Track normalization decisions
-            normalizations = {}
+            # Step 1: Handle "The" prefix normalizations (exact matches)
+            the_normalizations = handle_the_prefix_variants(artists)
             
-            for artist_name, count in artists:
-                if not artist_name:
-                    continue
-                    
-                # Check for "The" variants
-                if artist_name.lower().startswith('the '):
-                    # This is a "The" version, check if non-"The" version exists
-                    base_name = artist_name[4:].strip()  # Remove "The "
-                    
-                    # Check if base name exists in database
-                    base_result = conn.execute(text("""
-                        SELECT COUNT(*) as base_count
-                        FROM music_records 
-                        WHERE LOWER(artist_clean) = LOWER(:base_name)
-                    """), {'base_name': base_name})
-                    
-                    base_count = base_result.fetchone()[0]
-                    
-                    if base_count > 0:
-                        # Both versions exist, prefer "The" version for well-known bands
-                        well_known_the_bands = {
-                            'rolling stones', 'beatles', 'who', 'police', 'doors', 
-                            'cars', 'guess who', 'doobie brothers', 'black crowes'
-                        }
-                        
-                        if base_name.lower() in well_known_the_bands:
-                            # Use "The" version
-                            preferred = artist_name
-                            to_update = base_name
-                        else:
-                            # Use version with more records
-                            if count >= base_count:
-                                preferred = artist_name
-                                to_update = base_name
-                            else:
-                                preferred = base_name  
-                                to_update = artist_name
-                        
-                        normalizations[to_update.lower()] = preferred
-                        logger.info("Artist normalization decision", extra={
-                            'preferred': preferred, 'to_update': to_update,
-                            'the_count': count, 'base_count': base_count
-                        })
+            # Step 2: Apply fuzzy matching for remaining artists
+            fuzzy_normalizations = {}
+            if RAPIDFUZZ_AVAILABLE and fuzzy_threshold > 0:
+                # Remove artists already handled by "The" logic
+                remaining_artists = []
+                processed_names = set()
                 
-                else:
-                    # This is a non-"The" version, check if "The" version exists
-                    the_name = f"The {artist_name}"
+                for name, count in artists:
+                    # Check if this artist was already processed in "The" normalization
+                    already_processed = False
+                    for old_name, new_name in the_normalizations.items():
+                        if name.lower() == old_name or name.lower() == new_name.lower():
+                            already_processed = True
+                            processed_names.add(name.lower())
+                            break
                     
-                    the_result = conn.execute(text("""
-                        SELECT COUNT(*) as the_count
-                        FROM music_records 
-                        WHERE LOWER(artist_clean) = LOWER(:the_name)
-                    """), {'the_name': the_name})
-                    
-                    the_count = the_result.fetchone()[0]
-                    
-                    if the_count > 0:
-                        # Both versions exist, apply same logic as above
-                        well_known_the_bands = {
-                            'rolling stones', 'beatles', 'who', 'police', 'doors',
-                            'cars', 'guess who', 'doobie brothers', 'black crowes'
-                        }
-                        
-                        if artist_name.lower() in well_known_the_bands:
-                            # Use "The" version
-                            preferred = the_name
-                            to_update = artist_name
-                        else:
-                            # Use version with more records
-                            if count >= the_count:
-                                preferred = artist_name
-                                to_update = the_name
-                            else:
-                                preferred = the_name
-                                to_update = artist_name
-                        
-                        # Avoid duplicate decisions
-                        if to_update.lower() not in normalizations:
-                            normalizations[to_update.lower()] = preferred
-                            logger.info("Artist normalization decision", extra={
-                                'preferred': preferred, 'to_update': to_update,
-                                'base_count': count, 'the_count': the_count
-                            })
+                    if not already_processed:
+                        remaining_artists.append((name, count))
+                
+                logger.info("Running fuzzy matching", extra={
+                    'remaining_artists': len(remaining_artists),
+                    'threshold': fuzzy_threshold
+                })
+                
+                fuzzy_normalizations = find_fuzzy_artist_matches(remaining_artists, fuzzy_threshold)
             
-            # Apply normalizations
-            total_updated = 0
-            for old_name_key, new_name in normalizations.items():
-                # Update all records with this artist name (case insensitive)
-                result = conn.execute(text("""
-                    UPDATE music_records 
-                    SET artist_clean = :new_name
-                    WHERE LOWER(artist_clean) = :old_name_key
-                """), {'new_name': new_name, 'old_name_key': old_name_key})
-                
-                updated_count = result.rowcount
-                total_updated += updated_count
-                
-                if updated_count > 0:
-                    logger.info("Updated artist records", extra={
-                        'from': old_name_key, 'to': new_name, 'records_updated': updated_count
-                    })
+            # Combine all normalizations
+            all_normalizations = {**the_normalizations, **fuzzy_normalizations}
+            
+            # Step 3: Apply all normalizations to database
+            total_updated = apply_artist_normalizations(conn, all_normalizations)
             
             conn.commit()
             
             logger.info("Artist name normalization completed", extra={
-                'normalizations_applied': len(normalizations),
+                'the_normalizations': len(the_normalizations),
+                'fuzzy_normalizations': len(fuzzy_normalizations),
+                'total_normalizations': len(all_normalizations),
                 'total_records_updated': total_updated
             })
             
-            return len(normalizations)
+            return len(all_normalizations)
             
     except Exception as e:
         logger.error("Artist name normalization failed", extra={'error': str(e)})
         return 0
+
+
+def handle_the_prefix_variants(artists: List[Tuple[str, int]]) -> Dict[str, str]:
+    """Handle exact 'The' prefix variants (e.g., 'Beatles' vs 'The Beatles')"""
+    normalizations = {}
+    artist_dict = {name.lower(): (name, count) for name, count in artists}
+    
+    for artist_name, count in artists:
+        if artist_name.lower().startswith('the '):
+            base_name = artist_name[4:].strip()
+            
+            # Check if non-"The" version exists
+            if base_name.lower() in artist_dict:
+                base_count = artist_dict[base_name.lower()][1]
+                
+                # Apply "The" prefix rules
+                preferred = choose_the_prefix_version(artist_name, count, base_name, base_count)
+                to_update = base_name if preferred == artist_name else artist_name
+                
+                if to_update.lower() not in normalizations:
+                    normalizations[to_update.lower()] = preferred
+                    logger.info("The prefix normalization", extra={
+                        'preferred': preferred, 'to_update': to_update,
+                        'the_count': count, 'base_count': base_count
+                    })
+    
+    return normalizations
+
+
+def choose_the_prefix_version(the_name: str, the_count: int, base_name: str, base_count: int) -> str:
+    """Choose between 'The Artist' and 'Artist' versions based on smart rules"""
+    well_known_the_bands = {
+        'rolling stones', 'beatles', 'who', 'police', 'doors', 
+        'cars', 'guess who', 'doobie brothers', 'black crowes',
+        'eagles', 'kinks', 'clash', 'cure', 'smiths'
+    }
+    
+    if base_name.lower() in well_known_the_bands:
+        return the_name  # Always use "The" version for well-known bands
+    else:
+        # Use version with more records
+        return the_name if the_count >= base_count else base_name
+
+
+def apply_artist_normalizations(conn, normalizations: Dict[str, str]) -> int:
+    """Apply artist name normalizations to the database"""
+    total_updated = 0
+    
+    for old_name_key, new_name in normalizations.items():
+        # Update all records with this artist name (case insensitive)
+        result = conn.execute(text("""
+            UPDATE music_records 
+            SET artist_clean = :new_name
+            WHERE LOWER(artist_clean) = :old_name_key
+        """), {'new_name': new_name, 'old_name_key': old_name_key})
+        
+        updated_count = result.rowcount
+        total_updated += updated_count
+        
+        if updated_count > 0:
+            logger.info("Updated artist records", extra={
+                'from': old_name_key, 'to': new_name, 'records_updated': updated_count
+            })
+    
+    return total_updated
 
 
 def save_dataframe_to_db(df_pandas: pd.DataFrame, table_name: str = 'music_records') -> bool:

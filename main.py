@@ -246,9 +246,10 @@ def main():
     if save_success:
         logger.info("Track duration data saved successfully")
         
-        # Normalize artist names to handle "The" variants consistently
-        logger.info("Normalizing artist names for consistency")
-        normalizations = normalize_artist_names_in_db()
+        # Normalize artist names to handle "The" variants and fuzzy matches
+        logger.info("Normalizing artist names for consistency (including fuzzy matching)")
+        fuzzy_threshold = 90.0  # Adjust this value to be more/less strict (0-100)
+        normalizations = normalize_artist_names_in_db(fuzzy_threshold=fuzzy_threshold)
         logger.info("Artist normalization completed", extra={'normalizations': normalizations})
     else:
         logger.error("Failed to save track duration data")
