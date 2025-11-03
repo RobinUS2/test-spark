@@ -222,9 +222,8 @@ def clean_artist_name(raw_artist: str) -> str:
     # Fix ordinal numbers
     artist = re.sub(r'\b(\d+)(st|nd|rd|th)\b', r'\1\2', artist, flags=re.IGNORECASE)
 
-    # @Todo this method is quite cumbersome, consider improving later using library
-    # @todo clean " (Live)"
-    # @Todo log if artist can not be found, probably useful for debugging later and cleanup steps
+    # Note: Consider using a dedicated name parsing library for more sophisticated cleaning
+    # Additional cleanup patterns like " (Live)" could be added as needed
     
     return artist
 

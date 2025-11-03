@@ -9,13 +9,12 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
 
 import pandas as pd
-import sqlalchemy as sa
 from sqlalchemy import create_engine, text, Column, Integer, String, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 try:
-    from rapidfuzz import fuzz, process
+    from rapidfuzz import fuzz
     RAPIDFUZZ_AVAILABLE = True
 except ImportError:
     RAPIDFUZZ_AVAILABLE = False

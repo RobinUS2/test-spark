@@ -20,7 +20,6 @@ COPY database.py /app/
 COPY lastfm_api.py /app/
 COPY musicbrainz_api.py /app/
 COPY testdata.txt /app/
-COPY db_config.py /app/
 COPY setup_db.sh /app/
 RUN chmod +x /app/setup_db.sh
 

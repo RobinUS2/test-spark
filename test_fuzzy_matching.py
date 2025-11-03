@@ -5,7 +5,6 @@ Test script for fuzzy artist name matching
 
 import logging
 import sys
-import os
 sys.path.append('.')
 
 from database import normalize_artist_names_in_db, get_database_engine
