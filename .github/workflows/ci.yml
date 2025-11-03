@@ -161,4 +161,4 @@ jobs:
         
     - name: Test Python syntax
       run: |
-        python -m py_compile hello.py
+        python -m py_compile main.py utils.py database.py lastfm_api.py musicbrainz_api.py

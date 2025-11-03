@@ -1,4 +1,5 @@
 #!/bin/bash
+# Script to export database tables to CSV files (use copy_docker_db_to_local.sh to get local copy of the DB first)
 echo "removing old stuff"
 rm -f music_records.csv artist_images.csv track_info.csv
 

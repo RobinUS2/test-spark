@@ -3,7 +3,7 @@
 brew install openjdk@17 
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 python -c "import os; print(os.environ.get('JAVA_HOME'))"
-python hello.py
+python main.py
 
 # run locally
 docker run -it apache/spark-py /opt/spark/bin/pyspark
