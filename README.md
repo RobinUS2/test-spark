@@ -12,10 +12,20 @@ docker run -it apache/spark-py /opt/spark/bin/pyspark
 docker run --rm -it $(docker build -q .)
 
 ## Usage
-./setup_db.sh sqlite # to configure config for local usage
-./copy_docker_db_to_local.sh
-./export.sh will copy file to local for inspection
-simple sqlite for now, given the filesize, switching to postgres would be simple
+
+### Data Setup
+```bash
+./fetch_test_data.sh    # Download test data from GitHub repository
+```
+
+### Database Operations  
+```bash
+./setup_db.sh sqlite    # Configure for local SQLite usage
+./copy_docker_db_to_local.sh  # Copy database from Docker container
+./export.sh             # Export database tables to CSV files
+```
+
+Simple SQLite for now, given the filesize, switching to postgres would be simple
 
 ## Architecture
 Local docker setup for portability, yet simplicity. Could've done something full cloud / docker compose, but given the data set size and time constraints would like to keep it relatively simple, yet prepare for later scale increase; hence Spark as distributed processing framework. 
@@ -35,7 +45,6 @@ Via lastFm to MusicBrainz (LastFm stopped exposing images), bit of a little nigh
 ```
 
 ## Todos
-- @todo check for unused functions
 - @todo structured logger, update log verbosities, get rid of emojis, just show those as INFO records and set rest to DEBUG/TRACE
 - @todo use the artist name from lastfm as normalized clean value and use that for display in stats
 - @todo check output for errors
@@ -45,5 +54,8 @@ Via lastFm to MusicBrainz (LastFm stopped exposing images), bit of a little nigh
 - @todo check if logical split versus regex in py vs pandas for cleaning? not entirely sure sound like should be pandas
 - @todo cleanup read_db.py is duplicate probably, or maybe get rid of the copy bash script
 - @todo structure project, file names (e.g. hello.py), split files, move scripts into a folder, split functions if needed etc
+
+## To make it more production ready
 - @todo connect to gcp spark cluster + postgres maybe if time allows?
-- @todo setup github CI (local stuff all should be fine)
+- @todo connect to postgres
+- @todo setup (github) CI/CD (local stuff all should be fine)

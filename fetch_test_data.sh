@@ -2,7 +2,7 @@
 # Script to fetch test data from the TechcaseRobinVerlangen repository
 
 set -e  # Exit on any error
-
+rm testdata.txt
 REPO_URL="git@github.com:Team-Rockstars-IT/TechcaseRobinVerlangen.git"
 TEMP_DIR="temp_repo"
 TARGET_FILE="testdata.txt"
