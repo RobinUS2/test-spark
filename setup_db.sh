@@ -12,27 +12,27 @@ setup_postgresql() {
     
     # Check if PostgreSQL environment variables are set
     if [ -z "$DB_HOST" ]; then
-        echo "⚠️  DB_HOST environment variable not set. Using localhost."
+        echo "WARNING: DB_HOST environment variable not set. Using localhost."
         export DB_HOST="localhost"
     fi
     
     if [ -z "$DB_NAME" ]; then
-        echo "⚠️  DB_NAME environment variable not set. Using music_data."
+        echo "WARNING: DB_NAME environment variable not set. Using music_data."
         export DB_NAME="music_data"
     fi
     
     if [ -z "$DB_USER" ]; then
-        echo "⚠️  DB_USER environment variable not set. Using postgres."
+        echo "WARNING: DB_USER environment variable not set. Using postgres."
         export DB_USER="postgres"
     fi
     
     if [ -z "$DB_PASSWORD" ]; then
-        echo "⚠️  DB_PASSWORD environment variable not set."
+        echo "WARNING: DB_PASSWORD environment variable not set."
         echo "Please set it: export DB_PASSWORD='your_password'"
         exit 1
     fi
     
-    echo "✅ PostgreSQL configuration ready:"
+    echo "PostgreSQL configuration ready:"
     echo "   Host: $DB_HOST"
     echo "   Database: $DB_NAME" 
     echo "   User: $DB_USER"
@@ -40,7 +40,7 @@ setup_postgresql() {
     
     # Update the DB_CONFIG type in database.py
     sed -i "s/'type': 'sqlite'/'type': 'postgresql'/" database.py
-    echo "✅ Updated database.py to use PostgreSQL"
+    echo "Updated database.py to use PostgreSQL"
 }
 
 # Function to setup SQLite
@@ -52,7 +52,7 @@ setup_sqlite() {
     
     # Update the DB_CONFIG type in database.py  
     sed -i "s/'type': 'postgresql'/'type': 'sqlite'/" database.py
-    echo "✅ Updated database.py to use SQLite"
+    echo "Updated database.py to use SQLite"
     echo "   Database file: /app/data/music_data.db"
 }
 

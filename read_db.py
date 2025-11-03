@@ -22,14 +22,14 @@ def explore_database(db_path):
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = cursor.fetchall()
         
-        print(f"📊 Tables found: {len(tables)}")
+        print(f"Tables found: {len(tables)}")
         for table in tables:
             print(f"   • {table[0]}")
         
         print("\n" + "=" * 50)
         
         # Explore music_records table
-        print("\n🎵 MUSIC RECORDS TABLE")
+        print("\nMUSIC RECORDS TABLE")
         print("-" * 30)
         
         # Get table info
@@ -51,7 +51,7 @@ def explore_database(db_path):
         
         # Explore artist_images table
         print("\n" + "=" * 50)
-        print("\n🎭 ARTIST IMAGES TABLE")
+        print("\nARTIST IMAGES TABLE")
         print("-" * 30)
         
         # Get table info
@@ -102,10 +102,10 @@ def explore_database(db_path):
             print(f"   • {status}: {stat[1]}")
         
         conn.close()
-        print(f"\n✅ Database exploration completed!")
+        print(f"\nDatabase exploration completed!")
         
     except Exception as e:
-        print(f"❌ Error reading database: {e}")
+        print(f"Error reading database: {e}")
         return False
     
     return True
@@ -116,7 +116,7 @@ def interactive_query(db_path):
     conn = sqlite3.connect(db_path)
     
     print("\n" + "=" * 50)
-    print("🔍 INTERACTIVE QUERY MODE")
+    print("INTERACTIVE QUERY MODE")
     print("-" * 30)
     print("Enter SQL queries (type 'exit' to quit):")
     print("Examples:")
@@ -144,7 +144,7 @@ def interactive_query(db_path):
                 print(f"Query executed. Rows affected: {cursor.rowcount}")
                 
         except Exception as e:
-            print(f"❌ Query error: {e}")
+            print(f"Query error: {e}")
     
     conn.close()
     print("👋 Goodbye!")

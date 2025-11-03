@@ -15,7 +15,7 @@ def export_to_csv(db_path):
         cursor = conn.cursor()
         
         # Export music_records table
-        print("📊 Exporting music_records to music_records.csv...")
+        print("Exporting music_records to music_records.csv...")
         cursor.execute("SELECT * FROM music_records")
         
         with open('music_records.csv', 'w', newline='', encoding='utf-8') as csvfile:
@@ -31,7 +31,7 @@ def export_to_csv(db_path):
             writer.writerows(cursor.fetchall())
         
         # Export artist_images table
-        print("🎭 Exporting artist_images to artist_images.csv...")
+        print("Exporting artist_images to artist_images.csv...")
         cursor.execute("SELECT * FROM artist_images")
         
         with open('artist_images.csv', 'w', newline='', encoding='utf-8') as csvfile:
@@ -47,7 +47,7 @@ def export_to_csv(db_path):
             writer.writerows(cursor.fetchall())
         
         # Export track_info table
-        print("🎵 Exporting track_info to track_info.csv...")
+        print("Exporting track_info to track_info.csv...")
         cursor.execute("SELECT * FROM track_info")
         
         with open('track_info.csv', 'w', newline='', encoding='utf-8') as csvfile:
@@ -63,13 +63,13 @@ def export_to_csv(db_path):
             writer.writerows(cursor.fetchall())
         
         conn.close()
-        print("✅ CSV export completed!")
+        print("CSV export completed successfully!")
         print("   • music_records.csv")
         print("   • artist_images.csv")
         print("   • track_info.csv")
         
     except Exception as e:
-        print(f"❌ Export error: {e}")
+        print(f"Export error: {e}")
 
 if __name__ == "__main__":
     db_path = "music_data.db"

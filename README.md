@@ -37,11 +37,11 @@ Implemented the dual layer image lookup with caching via database (to reduce API
 ## Image fetching
 Via lastFm to MusicBrainz (LastFm stopped exposing images), bit of a little nightmare, but works here and there.
 ```
-🌐 Fetching for 'Creed' (cache key: 'Creed')
-🌐 Fetching from Last.fm API for artist: Creed (cache key: Creed)
-🔍 Last.fm API fields for 'Creed': ['name', 'mbid', 'url', 'image', 'streamable', 'ontour', 'stats', 'similar', 'tags', 'bio']
-🎵 Found MBID for 'Creed': 4b1a830b-0a1f-42e5-b8d5-1d6743912e99
-🎨 Found MusicBrainz image for MBID 4b1a830b-0a1f-42e5-b8d5-1d6743912e99: https://commons.wikimedia.org/wiki/Special:Redirect/file/File:Creed_salt_lake_city.jpg
+Fetching for 'Creed' (cache key: 'Creed')
+Fetching from Last.fm API for artist: Creed (cache key: Creed)
+Last.fm API fields for 'Creed': ['name', 'mbid', 'url', 'image', 'streamable', 'ontour', 'stats', 'similar', 'tags', 'bio']
+Found MBID for 'Creed': 4b1a830b-0a1f-42e5-b8d5-1d6743912e99
+Found MusicBrainz image for MBID 4b1a830b-0a1f-42e5-b8d5-1d6743912e99: https://commons.wikimedia.org/wiki/Special:Redirect/file/File:Creed_salt_lake_city.jpg
 ```
 
 ## Other things
@@ -56,6 +56,9 @@ Simple structured logger implemented.
 - @todo check final files for mess
 - @todo cleanup __pycache__ folder in git
 - @todo final clean + push into RS repo
+- @todo write few small tests in python
+- @todo ask for feedback on project, anti patterns
+- @todo ask for what else to do
 
 ## To make it more production ready
 - @todo connect to gcp spark cluster + postgres maybe if time allows?

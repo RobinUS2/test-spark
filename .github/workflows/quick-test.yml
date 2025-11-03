@@ -20,13 +20,13 @@ jobs:
         timeout 180s docker run --rm pyspark-test || {
           EXIT_CODE=$?
           if [ $EXIT_CODE -eq 124 ]; then
-            echo "✅ Application ran successfully (timed out after 3 minutes as expected)"
+            echo "Application ran successfully (timed out after 3 minutes as expected)"
             exit 0
           else
-            echo "❌ Application failed with exit code $EXIT_CODE"
+            echo "Application failed with exit code $EXIT_CODE"
             exit $EXIT_CODE
           fi
         }
         
     - name: Test completion
-      run: echo "✅ Quick test completed successfully!"
+      run: echo "Quick test completed successfully!"
