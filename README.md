@@ -43,9 +43,6 @@ Found MusicBrainz image for MBID 4b1a830b-0a1f-42e5-b8d5-1d6743912e99: https://c
 Simple structured logger implemented. Time felt relatively constrained to do all items properly for production grade code; chose to demonstrate here and there archicture over perfet implemenation of code sections. Didn't spend as much time on data validation (in the results), would like to do more manual cross checks to rule out remaining noise. More tests could help create stability in the future in the project to ensure we keep moving in the right direction; however with this rapid prototype and time constraints too early I believe. 
 
 
-## Todos
-
-## To make it more production ready
-- @todo connect to gcp spark cluster + postgres maybe if time allows?
-- @todo connect to postgres
+## Ideas to make it more production ready
+- @todo connect to spark cluster + postgres, hosted GCP for example
 - @todo setup (github) CI/CD (local stuff all should be fine)
