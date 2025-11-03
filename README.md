@@ -35,7 +35,8 @@ Sqlalchemy for DB connection with pandas. Into a local SQLite given the amount o
 Implemented the dual layer image lookup with caching via database (to reduce API calls, in production might want something like redis instead of SQL for caching; albeit easier to debug now, hence keeping that). 
 
 ## Image fetching
-Via lastFm to MusicBrainz (LastFm stopped exposing images), bit of a little nightmare, but works here and there.
+Via lastFm to MusicBrainz (LastFm stopped exposing images), bit of a little nightmare, but works here and there. The code currently limits the amount of artists and tracks fetched from external APIs to prevent rate limits being hit.
+
 ```
 Fetching for 'Creed' (cache key: 'Creed')
 Fetching from Last.fm API for artist: Creed (cache key: Creed)
@@ -45,19 +46,19 @@ Found MusicBrainz image for MBID 4b1a830b-0a1f-42e5-b8d5-1d6743912e99: https://c
 ```
 
 ## Other things
-Simple structured logger implemented.
+Simple structured logger implemented. Time felt relatively constrained to do all items properly for production grade code; chose to demonstrate here and there archicture over perfet implemenation of code sections. Didn't spend much time on data validation (in the results), would like to do more manual cross checks to rule out remaining noise. 
 
 
 ## Todos
+- @todo fuzzy matching Levenshtein or Jaro–Winkler
 - @todo check output for errors/warnings
 - @Todo remove lastfm api key into os env
 - @todo more explanation on what and why
 - @todo check if logical split versus regex in py vs pandas for cleaning? not entirely sure sound like should be pandas
 - @todo check final files for mess
-- @todo cleanup __pycache__ folder in git
 - @todo final clean + push into RS repo
 - @todo write few small tests in python
-- @todo ask for feedback on project, anti patterns
+- @todo ask for feedback on project, anti patterns, code smells
 - @todo ask for what else to do
 
 ## To make it more production ready

@@ -120,6 +120,9 @@ def clean_artist_name(raw_artist: str) -> str:
     if len(artist) < 1:
         return ""
     
+    # Trim surrounding quotes (single and double)
+    artist = artist.strip('\'"')
+    
     # Remove extra whitespace (multiple spaces, tabs, newlines)
     artist = re.sub(r'\s+', ' ', artist)
     
@@ -164,6 +167,26 @@ def clean_artist_name(raw_artist: str) -> str:
     # Apply replacements
     for pattern, replacement in replacements.items():
         artist = re.sub(pattern, replacement, artist, flags=re.IGNORECASE)
+    
+    # Normalize "The" prefix for consistent grouping
+    # For well-known bands, ensure consistent "The" usage
+    base_name = artist.lower().replace('the ', '', 1) if artist.lower().startswith('the ') else artist.lower()
+    
+    # Bands that should always have "The" prefix
+    bands_with_the = {
+        'rolling stones': 'The Rolling Stones',
+        'beatles': 'The Beatles', 
+        'who': 'The Who',
+        'police': 'The Police',
+        'doors': 'The Doors',
+        'cars': 'The Cars',
+        'guess who': 'The Guess Who',
+        'doobie brothers': 'The Doobie Brothers',
+        'black crowes': 'The Black Crowes'
+    }
+    
+    if base_name in bands_with_the:
+        artist = bands_with_the[base_name]
     
     # Title case handling - be smart about it
     # First, handle common words that should stay lowercase
@@ -225,6 +248,9 @@ def clean_song_title(raw_song: str) -> str:
     # Handle empty or very short strings
     if len(song) < 1:
         return ""
+    
+    # Trim surrounding quotes (single and double)
+    song = song.strip('\'"')
     
     # Remove extra whitespace (multiple spaces, tabs, newlines)
     song = re.sub(r'\s+', ' ', song)

@@ -8,7 +8,7 @@ from pyspark.sql.functions import udf, col
 from pyspark.sql.types import StringType, IntegerType
 
 from utils import setup_logging, parse_time_to_unix, clean_artist_name, clean_song_title, init_spark
-from database import init_database, save_dataframe_to_db, print_database_statistics, demonstrate_pandas_integration
+from database import init_database, save_dataframe_to_db, print_database_statistics, demonstrate_pandas_integration, normalize_artist_names_in_db
 from lastfm_api import fetch_lastfm_artist_info, fetch_lastfm_track_info
 
 # Set up logging
@@ -245,6 +245,11 @@ def main():
     
     if save_success:
         logger.info("Track duration data saved successfully")
+        
+        # Normalize artist names to handle "The" variants consistently
+        logger.info("Normalizing artist names for consistency")
+        normalizations = normalize_artist_names_in_db()
+        logger.info("Artist normalization completed", extra={'normalizations': normalizations})
     else:
         logger.error("Failed to save track duration data")
     

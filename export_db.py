@@ -62,26 +62,46 @@ def export_to_csv(db_path):
             cursor.execute("SELECT * FROM track_info")
             writer.writerows(cursor.fetchall())
         
-        # Export distinct Last.fm artist names
-        print("Exporting distinct Last.fm artists to distinct_artists.csv...")
+        # Export distinct artist names using COALESCE like other queries
+        print("Exporting distinct artists to distinct_artists.csv...")
         
         with open('distinct_artists.csv', 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
             
             # Write header
-            writer.writerow(['artist_name'])
+            writer.writerow(['artist_name', 'play_count', 'artist_clean', 'artist_lastfm'])
             
-            # Write data - distinct Last.fm artist names with play counts
+            # Write data - distinct artist names using COALESCE with play counts
             cursor.execute("""
-                SELECT DISTINCT 
-                    artist_lastfm as artist_name
+                SELECT 
+                    COALESCE(
+                        CASE WHEN artist_lastfm IS NULL OR artist_lastfm = '' OR artist_lastfm = 'None' 
+                             THEN NULL 
+                             ELSE artist_lastfm 
+                        END, 
+                        artist_clean
+                    ) as artist_name,
+                    COUNT(*) as play_count,
+                    MIN(artist_clean) as artist_clean,
+                    MIN(artist_lastfm) as artist_lastfm
                 FROM music_records 
-                WHERE artist_lastfm IS NOT NULL 
-                  AND artist_lastfm != ''
-                  AND artist_lastfm != 'None'
-                  AND TRIM(artist_lastfm) != ''
-                GROUP BY artist_lastfm
-                ORDER BY COUNT(*) DESC, artist_lastfm ASC
+                WHERE artist_clean IS NOT NULL 
+                  AND artist_clean != ''
+                  AND TRIM(artist_clean) != ''
+                GROUP BY COALESCE(
+                    CASE WHEN artist_lastfm IS NULL OR artist_lastfm = '' OR artist_lastfm = 'None' 
+                         THEN NULL 
+                         ELSE artist_lastfm 
+                    END, 
+                    artist_clean
+                )
+                ORDER BY COUNT(*) DESC, COALESCE(
+                    CASE WHEN artist_lastfm IS NULL OR artist_lastfm = '' OR artist_lastfm = 'None' 
+                         THEN NULL 
+                         ELSE artist_lastfm 
+                    END, 
+                    artist_clean
+                ) ASC
             """)
             writer.writerows(cursor.fetchall())
         

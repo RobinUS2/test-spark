@@ -133,6 +133,152 @@ def init_database():
         raise
 
 
+def normalize_artist_names_in_db():
+    """
+    Normalize artist names by checking if 'The' versions exist and using consistent spelling.
+    
+    Logic:
+    1. Find all artist_clean names that could have 'The' variants (e.g., 'Beatles' vs 'The Beatles')
+    2. For each pair, check which version has more records or if only one exists
+    3. Update all records to use the preferred version consistently
+    """
+    engine = get_database_engine()
+    
+    try:
+        with engine.connect() as conn:
+            logger.info("Starting artist name normalization")
+            
+            # Get all distinct artist_clean names
+            result = conn.execute(text("""
+                SELECT DISTINCT artist_clean, COUNT(*) as count 
+                FROM music_records 
+                WHERE artist_clean IS NOT NULL AND artist_clean != ''
+                GROUP BY artist_clean
+                ORDER BY COUNT(*) DESC
+            """))
+            
+            artists = result.fetchall()
+            logger.info("Found artists to analyze", extra={'count': len(artists)})
+            
+            # Track normalization decisions
+            normalizations = {}
+            
+            for artist_name, count in artists:
+                if not artist_name:
+                    continue
+                    
+                # Check for "The" variants
+                if artist_name.lower().startswith('the '):
+                    # This is a "The" version, check if non-"The" version exists
+                    base_name = artist_name[4:].strip()  # Remove "The "
+                    
+                    # Check if base name exists in database
+                    base_result = conn.execute(text("""
+                        SELECT COUNT(*) as base_count
+                        FROM music_records 
+                        WHERE LOWER(artist_clean) = LOWER(:base_name)
+                    """), {'base_name': base_name})
+                    
+                    base_count = base_result.fetchone()[0]
+                    
+                    if base_count > 0:
+                        # Both versions exist, prefer "The" version for well-known bands
+                        well_known_the_bands = {
+                            'rolling stones', 'beatles', 'who', 'police', 'doors', 
+                            'cars', 'guess who', 'doobie brothers', 'black crowes'
+                        }
+                        
+                        if base_name.lower() in well_known_the_bands:
+                            # Use "The" version
+                            preferred = artist_name
+                            to_update = base_name
+                        else:
+                            # Use version with more records
+                            if count >= base_count:
+                                preferred = artist_name
+                                to_update = base_name
+                            else:
+                                preferred = base_name  
+                                to_update = artist_name
+                        
+                        normalizations[to_update.lower()] = preferred
+                        logger.info("Artist normalization decision", extra={
+                            'preferred': preferred, 'to_update': to_update,
+                            'the_count': count, 'base_count': base_count
+                        })
+                
+                else:
+                    # This is a non-"The" version, check if "The" version exists
+                    the_name = f"The {artist_name}"
+                    
+                    the_result = conn.execute(text("""
+                        SELECT COUNT(*) as the_count
+                        FROM music_records 
+                        WHERE LOWER(artist_clean) = LOWER(:the_name)
+                    """), {'the_name': the_name})
+                    
+                    the_count = the_result.fetchone()[0]
+                    
+                    if the_count > 0:
+                        # Both versions exist, apply same logic as above
+                        well_known_the_bands = {
+                            'rolling stones', 'beatles', 'who', 'police', 'doors',
+                            'cars', 'guess who', 'doobie brothers', 'black crowes'
+                        }
+                        
+                        if artist_name.lower() in well_known_the_bands:
+                            # Use "The" version
+                            preferred = the_name
+                            to_update = artist_name
+                        else:
+                            # Use version with more records
+                            if count >= the_count:
+                                preferred = artist_name
+                                to_update = the_name
+                            else:
+                                preferred = the_name
+                                to_update = artist_name
+                        
+                        # Avoid duplicate decisions
+                        if to_update.lower() not in normalizations:
+                            normalizations[to_update.lower()] = preferred
+                            logger.info("Artist normalization decision", extra={
+                                'preferred': preferred, 'to_update': to_update,
+                                'base_count': count, 'the_count': the_count
+                            })
+            
+            # Apply normalizations
+            total_updated = 0
+            for old_name_key, new_name in normalizations.items():
+                # Update all records with this artist name (case insensitive)
+                result = conn.execute(text("""
+                    UPDATE music_records 
+                    SET artist_clean = :new_name
+                    WHERE LOWER(artist_clean) = :old_name_key
+                """), {'new_name': new_name, 'old_name_key': old_name_key})
+                
+                updated_count = result.rowcount
+                total_updated += updated_count
+                
+                if updated_count > 0:
+                    logger.info("Updated artist records", extra={
+                        'from': old_name_key, 'to': new_name, 'records_updated': updated_count
+                    })
+            
+            conn.commit()
+            
+            logger.info("Artist name normalization completed", extra={
+                'normalizations_applied': len(normalizations),
+                'total_records_updated': total_updated
+            })
+            
+            return len(normalizations)
+            
+    except Exception as e:
+        logger.error("Artist name normalization failed", extra={'error': str(e)})
+        return 0
+
+
 def save_dataframe_to_db(df_pandas: pd.DataFrame, table_name: str = 'music_records') -> bool:
     """
     Save pandas DataFrame to database using SQLAlchemy
